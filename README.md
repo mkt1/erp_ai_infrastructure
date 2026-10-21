@@ -85,7 +85,7 @@ Alle Werte stehen in [Units/host/erpai.host.conf](Units/host/erpai.host.conf) un
 | Szenarien auf dem Server | `/var/dev/MIMS-Scenarios/de/matthiaskittner/ki/<name>/` |
 | Backups | `/var/dev/MIMS-Scenarios/_backups` |
 | Namen (DNS) | `erpai`, `erpai-stage`, `erpai-dev`, `erpai-jenkins` — jeweils `.ki.matthiaskittner.de` (Wildcard zeigt auf den Server) |
-| Apps | `erp_ai_app` (`main` / `staging` / `dev/customer`), `sut_app_tax` (`main`, privat, eigener Deploy-Key, Alias `github_sut_app_tax`), `pdf_a_3` (`main`, oeffentlich) — je Instanz in `apps.json` |
+| Apps | `erp_ai_app` (`main` / `staging` / `dev/customer`), `sut_app_tax` (`main`, privat, eigener Deploy-Key, Alias `github_sut_app_tax`), `pdf_a_3` (`main`), `eu_einvoice` und `erpnext_datev` (alyf-de, `version-16`) — je Instanz in `apps.json` |
 
 **Kennwoerter und Schluessel — nur auf dem Server**, unter `/var/dev/MIMS-Scenarios/_secrets/`. Erzeugt vom
 Host-Skript, zufaellig, bei erneutem Lauf nie ueberschrieben:

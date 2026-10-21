@@ -18,9 +18,9 @@
 
 | Szenario | Adresse | Komponente | Apps (Branch) | Entwicklermodus | Port intern |
 |---|---|---|---|---|---|
-| `erpai` | https://erpai.ki.matthiaskittner.de | `de/erpai/erpnext/16.x` (Frappe/ERPNext `version-16`) | erp_ai_app `main`, sut_app_tax `main`, pdf_a_3 `main` | aus | 8180 |
-| `erpai-stage` | https://erpai-stage.ki.matthiaskittner.de | dito | erp_ai_app `staging`, sut_app_tax `main`, pdf_a_3 `main` | an | 8181 |
-| `erpai-dev` | https://erpai-dev.ki.matthiaskittner.de | dito | erp_ai_app `dev/customer`, sut_app_tax `main`, pdf_a_3 `main` | an | 8182 |
+| `erpai` | https://erpai.ki.matthiaskittner.de | `de/erpai/erpnext/16.x` (Frappe/ERPNext `version-16`) | erp_ai_app `main`, sut_app_tax `main`, pdf_a_3 `main`, eu_einvoice und erpnext_datev `version-16` | aus | 8180 |
+| `erpai-stage` | https://erpai-stage.ki.matthiaskittner.de | dito | erp_ai_app `staging`, sut_app_tax `main`, pdf_a_3 `main`, eu_einvoice und erpnext_datev `version-16` | an | 8181 |
+| `erpai-dev` | https://erpai-dev.ki.matthiaskittner.de | dito | erp_ai_app `dev/customer`, sut_app_tax `main`, pdf_a_3 `main`, eu_einvoice und erpnext_datev `version-16` | an | 8182 |
 | `erpai-jenkins` | https://erpai-jenkins.ki.matthiaskittner.de/jenkins/ | MIMS `io/jenkins/2.x.1` + eigenes Dockerfile (rsync, yq) | — | — | Host-Port 8190 |
 
 - Site-Name in allen drei ERPNext-Instanzen: **`erpai.ki.matthiaskittner.de`** (Reset kopiert den Site-Ordner der Produktion).

@@ -16,5 +16,17 @@
     "url": "https://github.com/schmidtundtoechter/pdf_a_3.git",
     "version": "main",
     "active": true
+  },
+  {
+    "name": "eu_einvoice",
+    "url": "https://github.com/alyf-de/eu_einvoice.git",
+    "version": "version-16",
+    "active": true
+  },
+  {
+    "name": "erpnext_datev",
+    "url": "https://github.com/alyf-de/erpnext_datev.git",
+    "version": "version-16",
+    "active": true
   }
 ]
