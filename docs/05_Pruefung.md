@@ -36,10 +36,25 @@
 → Minor von 0.1.0). Das ist das vorgesehene Verhalten; `staging` und `dev/customer` wurden auf diesen Commit
 nachgezogen, damit alle Instanzen beim ersten `init,up` dieselbe Version tragen.
 
-## Offen (bewusst, braucht Matthias)
+## Nachtrag 22.10.2026 — Rollout auf ki.netcup
 
-- Server und Domains festlegen, Platzhalter ersetzen (README §5) — **vor** dem ersten `init,up` (Site-Name).
-- Echter Lauf: `setup-host.sh`, vier Szenarien, Jenkins-Setup, Customer-Konto, Cloud-Umgebungen.
+| Nr. | Ergebnis | Nachweis |
+|---|---|---|
+| EK-07 | ✅ | Server ki.netcup, Domains `*.ki.matthiaskittner.de`, Namensraum `de/matthiaskittner/ki`; Umzugsbefehl README §5 |
+| EK-09 | ✅ | vier Szenarien laufen neben 57 Bestandscontainern, Traefik des Servers mitbenutzt, keine Kollision |
+| EK-18 | ✅ | `bench list-apps` auf allen drei Instanzen: erp_ai_app, sut_app_tax 0.8.0, pdf_a_3 0.0.1; Tax-Repo per eigenem Deploy-Key |
+| Rollout | ✅ | `erpai`, `erpai-stage`, `erpai-dev` HTTP 200; `erpai-jenkins` mit neun Jobs; `erpai-deploy-customer #1` und `erpai-backup-dev #1` SUCCESS |
+| Nicht geprueft | ⚠️ | `erpai-update-*` und `erpai-resetStage/-resetDev` sind noch nicht gelaufen (greifen in laufende Instanzen ein; erster Lauf bewusst von Hand) |
+
+**Retro-Nachtrag:** Der Einrichtungsassistent von Jenkins war in der Vorlage ein Klickweg; hier ersetzt ihn
+`setup-jenkins-init.sh` (Plugins per CLI, init-Skript) — damit ist `bootstrap.sh` ohne Browser durchlaufbar.
+Zwei Shell-Fallen kosteten je einen Durchlauf: zsh teilt unquotierte Variablen nicht an Leerzeichen (Dateiliste an
+`perl` ueber `xargs` geben), und `git mv -k` schweigt bei ungetrackten Dateien.
+
+## Offen (braucht Matthias)
+
+- Customer-Konto in ERPNext (Produktiv und Dev), API-Schluessel, Cloud-Umgebungen „Customer" / „Developer".
+- Erster Lauf von `erpai-backup-prod` / `erpai-backup-stage`, damit deren Zeittrigger greifen.
 
 ## Retrospektive
 

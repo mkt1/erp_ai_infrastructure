@@ -13,7 +13,7 @@
 - [x] Units/backup inkl. `set-badge.sh` (Regel CUSTOMER)
 - [x] Doku: README, 01–05, HERKUNFT, ssh-config.example, .gitignore
 - [x] Submodul `erp_ai_app` auf den neuen Stand
-- [ ] Commit und Push `main`
+- [x] Commit und Push `main`
 
 ## erp_ai_app
 - [x] Frappe-App-Rahmen: `hooks.py`, `modules.txt`, `pyproject.toml`, `__init__.py` (Version 0.1.0), `patches.txt`
@@ -24,10 +24,13 @@
 - [x] `.github/workflows/`: pfadregel.yml, release.yml
 - [x] Doku: CLAUDE.md, README, CHANGELOG, docs/wie-ich-entwickle, einrichtung-customer-cloud, einrichtung-developer-cloud, einrichtung-customer-lokal, site_branding, festlegungen/
 - [x] Repo privat; Branches `main`, `staging`, `dev/customer`
-- [ ] Commit und Push
+- [x] Commit und Push
 
-## Offen (nach diesem Vorhaben, braucht Matthias)
-- [ ] Server und Domains festlegen, Platzhalter ersetzen (README §5)
-- [ ] `setup-host.sh` auf dem Zielserver laufen lassen, Szenarien `init,up`
-- [ ] Jenkins einrichten (`setup-jenkins.sh`, `setup-jenkins-customer.sh`), ersten Lauf der Jobs
-- [ ] Customer-Konto in ERPNext und Cloud-Umgebung „Customer" bei Claude anlegen
+## Rollout (22.10.2026, nach Entscheidung Matthias: ki.netcup, *.ki.matthiaskittner.de)
+- [x] Domain und Namensraum `de/matthiaskittner/ki` eingetragen, Apps `sut_app_tax` und `pdf_a_3` ergaenzt
+- [x] `setup-host.sh` auf ki.netcup (zweimal, wiederholbar)
+- [x] `erpai`, `erpai-stage`, `erpai-dev`, `erpai-jenkins` mit `init,up` — alle HTTP 200
+- [x] Jenkins ohne Browser eingerichtet (`setup-jenkins-init.sh`), Jobs und Benutzer angelegt, zwei Jobs gruen
+- [x] `docs/SETUP.md` und `bootstrap.sh`
+- [ ] Customer-Konto in ERPNext und Cloud-Umgebungen bei Claude anlegen (Matthias)
+- [ ] Erster Lauf von `erpai-backup-prod` und `erpai-backup-stage` (aktiviert die Zeittrigger)

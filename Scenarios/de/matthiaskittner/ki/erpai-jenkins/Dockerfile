@@ -1,4 +1,4 @@
-# Jenkins fuer Clean Unit — ueberlagert das Dockerfile der MIMS-Komponente io/jenkins/2.x.1
+# Jenkins fuer ERP AI — ueberlagert das Dockerfile der MIMS-Komponente io/jenkins/2.x.1
 # (MIMS kopiert Dateien aus Scenarios/<namespace>/<name>/ ueber die der Komponente).
 #
 # Abweichung von der Vorlage: Die Vorlage installiert 'yq' aus den Debian-Paketen — das ist

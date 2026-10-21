@@ -7,8 +7,8 @@
 # Usage: ./bootstrap.sh [--skip-host] [--no-scenarios] [--only <szenario>[,<szenario>]] [--jenkins] [--dry-run]
 #   (ohne Optionen)   Submodule, Host-Setup, alle Szenarien aus SCENARIOS mit init,up
 #   --skip-host       Host-Setup ueberspringen (schon gelaufen)
-#   --jenkins         zusaetzlich Jenkins einrichten (setup-jenkins.sh, setup-jenkins-customer.sh);
-#                     Voraussetzung: der Einrichtungsassistent von Jenkins ist im Browser durchlaufen
+#   --jenkins         zusaetzlich Jenkins einrichten: setup-jenkins-init.sh (Plugins, Assistent, Benutzer
+#                     developer), setup-jenkins.sh (Credentials, Jobs), setup-jenkins-customer.sh — kein Browser noetig
 #   --only a,b        nur diese Szenarien ausrollen
 #   --no-scenarios    keine Szenarien anfassen (z. B. nur --jenkins)
 #   --dry-run         nur zeigen, was laufen wuerde
@@ -56,13 +56,11 @@ for s in $([ "$NO_SCEN" = 1 ] || echo "${ONLY:-$SCENARIOS}"); do
 done
 
 if [ "$DO_JENKINS" = 1 ]; then
-    echo "════ 4. Jenkins: Credentials, Jobs, Customer-Benutzer"
+    echo "════ 4. Jenkins: Plugins und Benutzer developer, Credentials und Jobs, Benutzer customer"
+    run bash -c "cd Units/jenkins && ./setup-jenkins-init.sh"
     run bash -c "cd Units/jenkins && ./setup-jenkins.sh"
     run bash -c "cd Units/jenkins && ./setup-jenkins-customer.sh"
 else
-    echo "════ 4. Jenkins (manuell, dann --jenkins):"
-    echo "   Einrichtungsassistent unter ${JENKINS_URL} mit dem ersten Kennwort durchlaufen:"
-    echo "   ssh ${SSHCONFIG_DEFAULT} docker exec ${JENKINS_CONTAINER} cat /var/jenkins_home/secrets/initialAdminPassword"
-    echo "   danach: ./bootstrap.sh --skip-host --no-scenarios --jenkins   (oder direkt Units/jenkins/setup-jenkins.sh)"
+    echo "════ 4. Jenkins uebersprungen — einrichten mit: ./bootstrap.sh --skip-host --no-scenarios --jenkins"
 fi
 echo "✅ bootstrap durch. Stand und Pruefung: docs/SETUP.md"

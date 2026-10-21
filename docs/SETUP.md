@@ -37,16 +37,18 @@
 | `frappe/.ssh/known_hosts` | GitHub-Host-Schluessel, gegen den veroeffentlichten Fingerabdruck geprueft | 2.4 |
 | `jenkins/host-ssh-key` | Jenkins → Host als `root` (Credential `host-ssh-key`); oeffentlicher Teil in `~root/.ssh/authorized_keys` | 2.7 |
 | `jenkins/infra-repo-key` | Deploy-Key `mkt1/erp_ai_infrastructure` (Credential `infra-repo-key`) | `setup-jenkins.sh` |
+| `jenkins/developer_password`, `jenkins/developer_api_token` | Jenkins-Administrator `developer` (Developer-Umgebung, `ERPAI_JENKINS_USER`) | `setup-jenkins-init.sh` |
 | `jenkins/customer_password`, `jenkins/customer_api_token` | Jenkins-Benutzer `customer` fuer `/ausrollen` | `setup-jenkins-customer.sh` |
-| Jenkins-Erstkennwort | im Container `/var/jenkins_home/secrets/initialAdminPassword` | Jenkins |
 
 Der Ordner `_secrets/` wird von anderen Szenarien mitbenutzt; seine Rechte werden nicht veraendert, nur die
 Unterordner `frappe/`, `jenkins/`, `traefik/` gehoeren diesem Setup.
 
 ## 4. Jenkins (`erpai-jenkins`)
 
-Credentials `host-ssh-key`, `infra-repo-key`, `app-repo-key`; neun Jobs, alle lesen `Jenkins/Jenkinsfile.*` aus
-`mkt1/erp_ai_infrastructure`, Branch `main`:
+Eingerichtet ohne Browser durch `Units/jenkins/setup-jenkins-init.sh` (Plugins per `jenkins-plugin-cli`, Assistent
+abgeschlossen, Benutzerdatenbank, Benutzer **`developer`** als Administrator mit API-Token `ausrollen`, CSRF an,
+Anonyme sehen nichts, Jenkins-URL gesetzt). Credentials `host-ssh-key`, `infra-repo-key`, `app-repo-key`; neun Jobs,
+alle lesen `Jenkins/Jenkinsfile.*` aus `mkt1/erp_ai_infrastructure`, Branch `main`:
 
 | Job | Trigger | Ziel |
 |---|---|---|
@@ -81,13 +83,14 @@ macht in dieser Reihenfolge, jeder Schritt wiederholbar:
 3. `./scenario.deploy de/matthiaskittner/ki/<s> init,up -v` fuer `erpai`, `erpai-stage`, `erpai-dev`, `erpai-jenkins` —
    nacheinander; ein laufendes Szenario wird uebersprungen. Der erste Start einer ERPNext-Instanz baut das Image
    und legt die Site an (einige Minuten).
-4. Jenkins von Hand: Einrichtungsassistent im Browser mit dem Erstkennwort, Plugins, eigenes Konto. Danach:
+4. Jenkins, ohne Browser (Jenkins startet dabei dreimal neu):
 
 ```bash
 ./bootstrap.sh --skip-host --no-scenarios --jenkins
 ```
 
-   legt Credentials, Jobs und den Benutzer `customer` an (Jenkins startet dabei neu).
+   `setup-jenkins-init.sh` (Plugins, Assistent, Benutzer `developer`), `setup-jenkins.sh` (Credentials, neun Jobs),
+   `setup-jenkins-customer.sh` (Benutzer `customer`). Kennwoerter: `ssh ki.netcup cat /var/dev/MIMS-Scenarios/_secrets/jenkins/developer_password`.
 
 5. Customer-Umgebung ausstatten (nicht automatisiert): ERPNext-Benutzer des Customers in Produktiv und Dev,
    API-Schluessel, Werte in die Cloud-Umgebung „Customer" (`erp_ai_app/docs/einrichtung-customer-cloud.md`);
@@ -110,10 +113,12 @@ Erwartet: `test` gruen, dreimal HTTP 200, `list-apps` nennt frappe, erpnext, erp
 
 ## 8. Stand der Umsetzung
 
-| Schritt | Stand 22.10.2026 |
+| Schritt | Stand 22.10.2026, 00:55 |
 |---|---|
-| Host-Setup | ✅ gelaufen (zweimal, zweiter Lauf mit Domain und Tax-Key) |
-| `erpai` | im Bau (erstes `init,up`) |
-| `erpai-stage`, `erpai-dev`, `erpai-jenkins` | offen |
-| Jenkins-Assistent, `--jenkins` | offen |
-| Customer-Konto, Cloud-Umgebungen | offen |
+| Host-Setup | ✅ gelaufen (Deploy-Keys fuer erp_ai_app und sut_app_tax bei GitHub, Admin-Kennwort, Jenkins-Schluessel) |
+| `erpai` | ✅ laeuft, HTTP 200, Apps erp_ai_app 0.2.1 (`main`), sut_app_tax 0.8.0, pdf_a_3 0.0.1, Badge-Regeln angelegt |
+| `erpai-stage` | ✅ laeuft, HTTP 200, erp_ai_app aus `staging`, Entwicklermodus an |
+| `erpai-dev` | ✅ laeuft, HTTP 200, erp_ai_app aus `dev/customer`, Badge `CUSTOMER · 3c45d99 · …` vom Deploy-Job |
+| `erpai-jenkins` | ✅ laeuft, ohne Assistent eingerichtet; Benutzer `developer` und `customer` mit Tokens; neun Jobs |
+| Jenkins-Jobs geprueft | ✅ `erpai-deploy-customer #1` und `erpai-backup-dev #1` SUCCESS — Polling und Zeittrigger damit aktiv |
+| Offen | Customer-Konto in ERPNext (Benutzer, API-Schluessel), Cloud-Umgebungen „Customer" und „Developer" bei Claude; erster Lauf von `erpai-backup-prod` / `-stage` (aktiviert deren Zeittrigger: `Units/jenkins/setup-jenkins.sh --run erpai-backup-prod --run erpai-backup-stage` oder in Jenkins „Jetzt bauen") |
