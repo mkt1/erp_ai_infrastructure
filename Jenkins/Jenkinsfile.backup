@@ -1,0 +1,183 @@
+// Jenkinsfile.backup — naechtliches Backup einer ERPNext-Instanz von ERP AI
+//
+// Ein Jenkinsfile fuer drei Jobs; welche Instanz gesichert wird, bestimmt der Jobname:
+//   erpai-backup-prod  → Szenario erpai        (Produktiv), taeglich gegen 2 Uhr
+//   erpai-backup-stage → Szenario erpai-stage  (Stage),     taeglich gegen 3 Uhr
+//   erpai-backup-dev   → Szenario erpai-dev    (Dev),       taeglich gegen 4 Uhr
+// Enthaelt der Jobname "stage", wird die Stage gesichert; "dev" die Dev-Instanz; sonst Produktiv.
+//
+// Abgeleitet aus der Vorlage (Kundenprojekt, Stand 21.10.2026, siehe docs/HERKUNFT.md), verallgemeinert:
+// keine Kundennamen, Pfade relativ zur Repo-Wurzel (dieses Repo ist eigenstaendig).
+//
+// Jenkins-Job: Pipeline from SCM → Repo mkt1/erp_ai_infrastructure, Branch main,
+//   Script Path: Jenkins/Jenkinsfile.backup
+// Benoetigte Credentials: host-ssh-key (SSH-Key fuer root auf dem Zielserver)
+
+pipeline {
+    agent any
+
+    triggers {
+        // Taeglich nachts, Minute von Jenkins verteilt; Stage und Dev je eine Stunde spaeter
+        cron(env.JOB_NAME.contains('stage') ? 'H 3 * * *' : (env.JOB_NAME.contains('dev') ? 'H 4 * * *' : 'H 2 * * *'))
+    }
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 2, unit: 'HOURS')
+    }
+
+    environment {
+        INFRA_DIR        = "${WORKSPACE}"
+        SCENARIO_DEPLOY  = "${WORKSPACE}/MIMS/scenario.deploy"
+        // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
+        // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
+        TARGET_HOST      = "ki.netcup"
+        TARGET_HOSTNAME  = "ki.netcup"
+        TARGET_BASE_PATH = "de/erpai"
+        CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
+        BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
+        // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in
+        // Jenkins der Mailversand eingerichtet ist (Jenkins verwalten → System → E-Mail).
+        NOTIFY_RECIPIENTS = ""
+        // ssh/scp-Wrapper im WORKSPACE ueberdecken die echten Binaries und erzwingen -F
+        PATH = "${env.WORKSPACE}:${env.PATH}"
+        // Szenario aus dem Jobnamen (siehe Kopf)
+        BACKUP_SERVICE   = "${env.JOB_NAME.contains('stage') ? 'erpai-stage' : (env.JOB_NAME.contains('dev') ? 'erpai-dev' : 'erpai')}"
+    }
+
+    stages {
+        stage('Checkout Dependencies') {
+            steps {
+                // MIMS ist Submodul dieses Repos; der SCM-Checkout liefert es nicht mit → direkt klonen
+                dir('MIMS') {
+                    git url: 'https://github.com/Cerulean-Circle-GmbH/MIMS.git', branch: 'mims2'
+                }
+            }
+        }
+
+        stage('Backup') {
+            steps {
+                script {
+                    echo "Sichere Szenario ${env.BACKUP_SERVICE}"
+                    testConnection(env.BACKUP_SERVICE)
+
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        withHostSSH {
+                            sh '''
+                                cd "${INFRA_DIR}"
+                                ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/${BACKUP_SERVICE} backup -v
+                            '''
+                        }
+                    }
+
+                    withHostSSH {
+                        // Das Backup-Verzeichnis gehoert dem Benutzer frappe der ERPNext-Container
+                        // (uid 1000): 'bench backup' legt seine Dateien als dieser Benutzer dort ab.
+                        // Die Volume-Archive entstehen als root; danach alles wieder frappe zuordnen.
+                        sh '''
+                            BACKUP_DIR_NORM="${BACKUP_DIR%/}"
+                            BACKUP_PARENT="$(dirname "${BACKUP_DIR_NORM}")"
+                            ssh ${TARGET_HOST} docker run --rm -v "${BACKUP_PARENT}:${BACKUP_PARENT}" ubuntu:24.04 chown -R 1000:1000 "${BACKUP_DIR_NORM}"
+                        '''
+                    }
+
+                    cleanupOldBackups()
+                    cleanupDockerImages()
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Benachrichtigung nur, wenn ein Empfaenger gesetzt ist; ein fehlender oder
+                // falsch eingerichteter Mailversand darf das Ergebnis des Jobs nicht kippen.
+                if (env.NOTIFY_RECIPIENTS?.trim()) {
+                    try {
+                        mail(
+                            to: env.NOTIFY_RECIPIENTS,
+                            subject: "[Jenkins] ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: "Build-Ergebnis: ${currentBuild.currentResult}\nJob: ${env.JOB_NAME} #${env.BUILD_NUMBER}\nLogs: ${env.BUILD_URL}console\n",
+                            mimeType: 'text/plain'
+                        )
+                        echo "📧 Ergebnis-Benachrichtigung (${currentBuild.currentResult}) versendet an: ${env.NOTIFY_RECIPIENTS}"
+                    } catch (err) {
+                        echo "⚠️ Benachrichtigung konnte nicht versendet werden: ${err}"
+                    }
+                } else {
+                    echo 'Keine Benachrichtigung: NOTIFY_RECIPIENTS ist leer.'
+                }
+            }
+        }
+        failure {
+            echo '⚠️  Pipeline fehlgeschlagen! Bitte Logs pruefen.'
+        }
+        success {
+            echo '✅ Pipeline erfolgreich abgeschlossen.'
+        }
+    }
+}
+
+// ── Hilfsfunktionen (in allen Jenkinsfiles dieses Repos identisch) ──────────────────────────────
+
+// SSH-Konfiguration fuer den Zielserver schreiben und ssh/scp-Wrapper anlegen.
+// Muss innerhalb von withCredentials(host-ssh-key) laufen. TARGET_HOST und TARGET_HOSTNAME
+// stehen in der environment-Sektion; PLATZHALTER fuer HostName, bis der Server festgelegt ist.
+def setupSSHConfig() {
+    sh '''
+        cat > "${WORKSPACE}/.ssh_config" << EOF
+Host ${TARGET_HOST}
+    User root
+    Port 22
+    HostName ${TARGET_HOSTNAME}
+    IdentityFile ${SSH_KEY}
+    StrictHostKeyChecking no
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    ConnectTimeout 30
+EOF
+        chmod 600 "${WORKSPACE}/.ssh_config"
+        printf '#!/bin/sh\\nexec /usr/bin/ssh -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/ssh"
+        printf '#!/bin/sh\\nexec /usr/bin/scp -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/scp"
+        chmod +x "${WORKSPACE}/ssh" "${WORKSPACE}/scp"
+    '''
+}
+
+def withHostSSH(Closure body) {
+    withCredentials([sshUserPrivateKey(credentialsId: 'host-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+        setupSSHConfig()
+        body()
+    }
+}
+
+def testConnection(String serviceName) {
+    withHostSSH {
+        sh """
+            cd "\${INFRA_DIR}"
+            \${SCENARIO_DEPLOY} \${TARGET_BASE_PATH}/${serviceName} test -h
+            ssh \${TARGET_HOST} 'echo "SSH OK: \$(hostname) / \$(uptime)"'
+        """
+    }
+}
+
+// Aufbewahrung: alle Backups der letzten 7 Tage, danach eines pro Woche fuer 51 Wochen
+def cleanupOldBackups() {
+    withHostSSH {
+        sh '''
+            echo "🧹 Backup-Cleanup auf ${TARGET_HOST} in ${BACKUP_DIR}..."
+            scp "${INFRA_DIR}/Units/backup/cleanupOldArchives.sh" ${TARGET_HOST}:${BACKUP_DIR}
+            ssh ${TARGET_HOST} "cd ${BACKUP_DIR} && chmod +x cleanupOldArchives.sh && ./cleanupOldArchives.sh -f -d 7 -w 51"
+        '''
+    }
+}
+
+def cleanupDockerImages() {
+    withHostSSH {
+        sh '''
+            echo "🐳 Docker-Image-Cleanup auf ${TARGET_HOST}..."
+            scp "${INFRA_DIR}/Units/backup/cleanupDockerImages.sh" ${TARGET_HOST}:/tmp/
+            ssh ${TARGET_HOST} 'chmod +x /tmp/cleanupDockerImages.sh && /tmp/cleanupDockerImages.sh -f && rm -f /tmp/cleanupDockerImages.sh'
+        '''
+    }
+}

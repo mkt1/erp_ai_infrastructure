@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#
+# scenario.deploy — Stub für das MIMS-Deploy-Werkzeug (Submodul ./MIMS)
+#
+# Ruft MIMS/scenario.deploy auf und sorgt dafür, dass das Arbeitsverzeichnis
+# dieses Repository ist. MIMS löst relativ zum Arbeitsverzeichnis auf:
+#   ./Scenarios/   – die Szenario-Definitionen (*.scenario.env, apps.json)
+#   ./Components/  – eigene Komponenten (z. B. de/sut/erpnext/16.x);
+#                    fehlt eine Komponente hier, wird MIMS/Components/ genutzt
+#   ./_scenarios/  – lokaler Arbeitsstand (gitignored)
+#
+# Aufruf (von überall):  /pfad/zu/metralabs_infrastructure/scenario.deploy com/metralabs/erp test -v
+# Hilfe:                 ./scenario.deploy          (ohne Argumente)
+#
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MIMS_DEPLOY="$ROOT/MIMS/scenario.deploy"
+
+if [ ! -f "$MIMS_DEPLOY" ]; then
+  echo "MIMS-Submodul ist nicht initialisiert ($MIMS_DEPLOY fehlt)." >&2
+  echo "Bitte ausführen:  git -C \"$ROOT\" submodule update --init" >&2
+  exit 1
+fi
+
+cd "$ROOT"
+exec bash "$MIMS_DEPLOY" "$@"

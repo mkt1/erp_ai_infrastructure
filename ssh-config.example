@@ -1,0 +1,15 @@
+# Eintrag fuer ~/.ssh/config (und sinngemaess fuer Jenkins, siehe Jenkins/Jenkinsfile.* →
+# setupSSHConfig). Der Name ki.netcup steht in allen Szenarien als SCENARIO_SERVER_SSHCONFIG
+# und in Units/host/erpai.host.conf als SSHCONFIG_DEFAULT.
+#
+# PLATZHALTER: HostName, Benutzer und Schluessel an den Zielserver anpassen. Soll ein anderer
+# Server als ki.netcup genutzt werden, den Alias in erpai.host.conf und in allen
+# Scenarios/de/erpai/*.scenario.env ersetzen (ein sed-Aufruf, siehe README §5).
+Host ki.netcup
+    HostName <server-adresse>
+    User root
+    Port 22
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    ConnectTimeout 30

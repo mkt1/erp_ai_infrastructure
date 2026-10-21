@@ -1,0 +1,81 @@
+## Scenario metadata
+# Short scenario description shown by 'scenario.deploy <scenario> inspect'.
+SCENARIO_DESCRIPTION=No description
+## Source setup
+# This is the scenario component name which will be automatically filled. Default is ignored but must not be empty.
+SCENARIO_SRC_COMPONENT=.
+# This is the cache directory for downloaded files, like structr.zip or WODA-current.tar.gz
+SCENARIO_SRC_CACHEDIR=~/.cache/MIMS-Scenarios
+# This is the directory storing secrets for docker containers
+SCENARIO_SRC_SECRETSDIR=/var/dev/MIMS-Scenarios/_secrets
+## Server setup
+# What is the server, the scenario will be deployed to?
+SCENARIO_SERVER_NAME=test.wo-da.de
+# What is the SSH config the server can be connected with?
+SCENARIO_SERVER_SSHCONFIG=WODA.test
+# What is the scenarios root directory on the server?
+SCENARIO_SERVER_CONFIGSDIR=/var/dev/MIMS-Scenarios
+## Frappe framework version
+# Branch name (e.g. version-16) or pinned tag (e.g. v16.0.0) or commit hash
+SCENARIO_FRAPPE_VERSION=version-16
+# Frappe git repository URL
+SCENARIO_FRAPPE_PATH=https://github.com/frappe/frappe
+## ERPNext version and source
+# Branch name (e.g. version-16) or pinned tag (e.g. v16.0.0) or commit hash
+SCENARIO_ERPNEXT_VERSION=version-16
+# ERPNext git repository URL
+SCENARIO_ERPNEXT_REPO=https://github.com/frappe/erpnext
+# Which frontend port should ERPNext use internally (nginx listen port)?
+SCENARIO_ERPNEXT_FRONTENDPORT=8080
+# Run the bench in developer mode (true or false; use false for production sites)?
+SCENARIO_ERPNEXT_DEVELOPERMODE=true
+## Installation setup
+# Which apps do you want to install?
+SCENARIO_INSTALL_APPS=apps.json
+## Config data setup
+# What is the path used to store the env (e.g. './env' or 'env_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_1_PATH=env
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_1_EXTERNAL=true
+# What is the path used to store apps (e.g. './apps' or 'apps_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_2_PATH=apps
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_2_EXTERNAL=true
+# What is the path used to store the sites (e.g. './sites' or 'sites_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_3_PATH=sites
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_3_EXTERNAL=true
+# What is the path used to store logs (e.g. './logs' or 'logs_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_4_PATH=logs
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_4_EXTERNAL=true
+# What is the path used to store the redis-queue-data (e.g. './redis-queue-data' or 'redis-queue-data_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_5_PATH=redis-queue-data
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_5_EXTERNAL=true
+# What is the path used to store redis-cache-data (e.g. './redis-cache-data' or 'redis-cache-data_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_6_PATH=redis-cache-data
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_6_EXTERNAL=true
+# What is the path used to store the db-data (e.g. './db-data' or 'db-data_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_7_PATH=db-data
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_7_EXTERNAL=true
+# What is the path used to store the assets (e.g. './assets' or 'assets_storage'; if it contains a '/', it is considered as a path, otherwise as a docker volume name)?
+SCENARIO_DATA_VOLUME_8_PATH=assets
+# Is the volume external (true or false; if not external, it will be deleted on down)?
+SCENARIO_DATA_VOLUME_8_EXTERNAL=true
+# What is the path used to store the volume backups
+SCENARIO_DATA_BACKUPDIR=/var/dev/MIMS-Scenarios/_backups
+# What is the timestamp of the backup to restore (format: YYYYMMDDHHMMSS) in non-interactive mode?
+SCENARIO_DATA_BACKUPTIMESTAMP=latest
+## Site configuration setup
+# What is the name of the site to create (e.g. 'mysite.local')?
+SCENARIO_SITE_NAME=erpnext.test.schmidtundtoechter.de
+## Traefik proxy setup
+# What is the url?
+SCENARIO_TRAEFIK_URL=erpnext.test.schmidtundtoechter.de
+# Route to erpnext (does not yet work with erpnext)
+SCENARIO_TRAEFIK_ROUTE=/
+# Do you want to route this service via traefik? Disable only when another TLS-terminating reverse proxy reaches the internal Docker network.
+SCENARIO_TRAEFIK_ENABLE=true

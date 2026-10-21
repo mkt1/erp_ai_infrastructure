@@ -1,0 +1,204 @@
+// Jenkinsfile.deploy — leichtes Ausrollen des Branches dev/customer auf die Dev-Instanz (erpai-dev)
+//
+// Das ist der Alltagsweg der Customer-Umgebung: commit, push, und ein bis zwei Minuten spaeter steht
+// der Stand auf der Dev-Instanz. Anders als erpai-update-dev (volles Upgrade mit Sicherung, Images,
+// bench build, 5–10 Minuten Ausfall) macht dieser Job nur das Noetige:
+//   1. App-Repo auf dev/customer auschecken (hier im Jenkins; dient auch dem Polling)
+//   2. Im Backend-Container der Instanz: App auf den Branch heben (fix-git-refs.sh)
+//   3. Nur wenn noetig: pip install -e (pyproject.toml geaendert), bench build (public/ geaendert)
+//   4. bench migrate, Cache leeren, App-Container neu starten
+//   5. Pruefen, ob die Instanz antwortet; ausgerollten Commit auf dem Server merken
+//
+// Ausloeser:
+//   A  pollSCM alle zwei Minuten auf dem App-Repo — greift bei jedem Push auf dev/customer
+//   C  der Skill /ausrollen der App stoesst den Job sofort per REST an und wartet auf das Ergebnis
+// Ziel ist fest erpai-dev — dieser Job rollt nie auf Stage oder Produktiv aus.
+//
+// Jenkins-Job: erpai-deploy-customer, Pipeline from SCM → Repo mkt1/erp_ai_infrastructure, Branch main,
+//   Script Path: Jenkins/Jenkinsfile.deploy
+// Benoetigte Credentials: host-ssh-key, app-repo-key (Deploy-Key mkt1/erp_ai_app, nur lesend)
+
+pipeline {
+    agent any
+
+    triggers {
+        // Weg A: Jenkins fragt das App-Repo ab; der Trigger wird nach dem ersten Lauf aktiv
+        pollSCM('H/2 * * * *')
+    }
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    environment {
+        INFRA_DIR        = "${WORKSPACE}"
+        SCENARIO_DEPLOY  = "${WORKSPACE}/MIMS/scenario.deploy"
+        // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
+        // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
+        TARGET_HOST      = "ki.netcup"
+        TARGET_HOSTNAME  = "ki.netcup"
+        TARGET_BASE_PATH = "de/erpai"
+        CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
+        BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
+        // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in
+        // Jenkins der Mailversand eingerichtet ist (Jenkins verwalten → System → E-Mail).
+        NOTIFY_RECIPIENTS = ""
+        // ssh/scp-Wrapper im WORKSPACE ueberdecken die echten Binaries und erzwingen -F
+        PATH = "${env.WORKSPACE}:${env.PATH}"
+        APP_REPO         = "git@github.com:mkt1/erp_ai_app.git"
+        APP_BRANCH       = "dev/customer"
+        APP_NAME         = "erp_ai_app"
+        SCENARIO         = "erpai-dev"
+        BACKEND          = "erpai-dev_erpnext_backend_container"
+        // PLATZHALTER: Site und Adresse der Dev-Instanz (README §4)
+        SITE             = "erp.example.de"
+        TARGET_URL       = "https://erp-dev.example.de"
+        // Merkt sich auf dem Server, welcher Commit zuletzt ausgerollt wurde (fuer die Aenderungsliste)
+        STATE_FILE       = "/var/dev/MIMS-Scenarios/de/erpai/erpai-dev/.deployed-commit"
+    }
+
+    stages {
+        stage('App auschecken') {
+            steps {
+                dir('app') {
+                    git url: env.APP_REPO, branch: env.APP_BRANCH, credentialsId: 'app-repo-key'
+                }
+                script {
+                    env.NEW_COMMIT = sh(script: 'git -C app rev-parse HEAD', returnStdout: true).trim()
+                    env.NEW_SUBJECT = sh(script: 'git -C app log -1 --format=%s', returnStdout: true).trim()
+                    currentBuild.description = "${env.NEW_COMMIT.take(7)} — ${env.NEW_SUBJECT}"
+                    echo "Auszurollen: ${currentBuild.description}"
+                }
+            }
+        }
+
+        stage('Ausrollen') {
+            steps {
+                script {
+                    withHostSSH {
+                        sh """
+                            set -e
+                            ssh \${TARGET_HOST} "docker inspect -f '{{.State.Running}}' \${BACKEND}" | grep -qx true \\
+                                || { echo "FEHLER: \${BACKEND} laeuft nicht — Instanz zuerst mit erpai-update-dev aufsetzen" >&2; exit 1; }
+
+                            # Was hat sich seit dem letzten Ausrollen geaendert? Ohne Merkdatei: alles.
+                            PREV=\$(ssh \${TARGET_HOST} "cat \${STATE_FILE} 2>/dev/null" || true)
+                            if [ -n "\$PREV" ] && git -C app cat-file -e "\$PREV" 2>/dev/null; then
+                                CHANGED=\$(git -C app diff --name-only "\$PREV" "\${NEW_COMMIT}")
+                                echo "Geaendert seit \$PREV:"; echo "\$CHANGED" | sed 's/^/   /'
+                            else
+                                CHANGED="pyproject.toml \${APP_NAME}/public/"
+                                echo "Kein vorheriger Stand bekannt — vollstaendiges Ausrollen."
+                            fi
+                            NEED_PIP=0;   echo "\$CHANGED" | grep -qE '^(pyproject.toml|setup.py|requirements.txt)\$' && NEED_PIP=1
+                            NEED_BUILD=0; echo "\$CHANGED" | grep -qE "^(\${APP_NAME}/public/|package.json)" && NEED_BUILD=1
+
+                            # Der Backend-Container hat keinen SSH-Schluessel (nur create-site kopiert ihn beim
+                            # Start). Deshalb hier wie dort: Deploy-Key aus _secrets in den Container kopieren.
+                            echo "── Deploy-Key in den Backend-Container kopieren"
+                            ssh \${TARGET_HOST} "docker exec \${BACKEND} sh -c 'rm -rf /home/frappe/.ssh && cp -r \${CONFIGS_DIR}/_secrets/frappe/.ssh /home/frappe/.ssh && chmod 700 /home/frappe/.ssh && chmod 600 /home/frappe/.ssh/*'"
+
+                            echo "── App auf \${APP_BRANCH} heben"
+                            # fix-git-refs.sh liegt im Backend nicht unter frappe-bench (nur create-site kopiert es dorthin, das
+                            # Verzeichnis ist kein Volume) — der Szenario-Ordner des Hosts ist aber gemountet.
+                            ssh \${TARGET_HOST} "docker exec -w /home/frappe/frappe-bench \${BACKEND} bash \${CONFIGS_DIR}/\${TARGET_BASE_PATH}/\${SCENARIO}/fix-git-refs.sh apps/\${APP_NAME} \${APP_BRANCH} \${APP_REPO}"
+                            GOT=\$(ssh \${TARGET_HOST} "docker exec \${BACKEND} git -C apps/\${APP_NAME} rev-parse HEAD")
+                            [ "\$GOT" = "\${NEW_COMMIT}" ] || { echo "FEHLER: Im Container steht \$GOT, erwartet \${NEW_COMMIT}" >&2; exit 1; }
+
+                            if [ "\$NEED_PIP" = 1 ]; then
+                                echo "── Python-Abhaengigkeiten (pyproject.toml geaendert)"
+                                ssh \${TARGET_HOST} "docker exec \${BACKEND} ./env/bin/pip install -q -e apps/\${APP_NAME}"
+                            fi
+                            if [ "\$NEED_BUILD" = 1 ]; then
+                                echo "── Assets bauen (public/ geaendert)"
+                                ssh \${TARGET_HOST} "docker exec \${BACKEND} bench build --app \${APP_NAME}"
+                            fi
+
+                            echo "── migrate und Cache"
+                            ssh \${TARGET_HOST} "docker exec \${BACKEND} bench --site \${SITE} migrate"
+                            ssh \${TARGET_HOST} "docker exec \${BACKEND} bench --site \${SITE} clear-cache"
+
+                            # Badge der Instanz zeigt den ausgerollten Stand (kein Release — siehe Skill /release in der App).
+                            echo "── Badge setzen"
+                            "\${INFRA_DIR}/Units/backup/set-badge.sh" \\
+                                --remote \${TARGET_HOST} --backend \${BACKEND} --site \${SITE} --rule CUSTOMER \\
+                                --text "CUSTOMER · \$(printf '%.7s' "\${NEW_COMMIT}") · \$(date '+%d.%m. %H:%M')"
+
+                            echo "── App-Container neu starten"
+                            ssh \${TARGET_HOST} "docker restart \${SCENARIO}_erpnext_backend_container \${SCENARIO}_erpnext_queue-short_container \${SCENARIO}_erpnext_queue-long_container \${SCENARIO}_erpnext_scheduler_container \${SCENARIO}_erpnext_websocket_container" >/dev/null
+
+                            for i in \$(seq 1 30); do
+                                code=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "\${TARGET_URL}/api/method/ping" || true)
+                                [ "\$code" = "200" ] && break
+                                sleep 5
+                            done
+                            [ "\$code" = "200" ] || { echo "FEHLER: \${TARGET_URL} antwortet nicht (zuletzt HTTP \$code)" >&2; exit 1; }
+
+                            ssh \${TARGET_HOST} "echo \${NEW_COMMIT} > \${STATE_FILE}"
+                            echo "✅ Ausgerollt auf \${TARGET_URL}: \${NEW_COMMIT} — \${NEW_SUBJECT}"
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                if (env.NOTIFY_RECIPIENTS?.trim()) {
+                    try {
+                        mail(to: env.NOTIFY_RECIPIENTS,
+                             subject: "[Jenkins] ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                             body: "Build-Ergebnis: ${currentBuild.currentResult}\nJob: ${env.JOB_NAME} #${env.BUILD_NUMBER}\n${currentBuild.description}\nLogs: ${env.BUILD_URL}console\n",
+                             mimeType: 'text/plain')
+                    } catch (err) { echo "⚠️ Benachrichtigung konnte nicht versendet werden: ${err}" }
+                }
+            }
+        }
+        failure { echo '⚠️  Ausrollen fehlgeschlagen — Log pruefen. Die Instanz kann in einem Zwischenzustand sein; notfalls erpai-update-dev oder erpai-resetDev.' }
+    }
+}
+
+// ── Hilfsfunktionen (in allen Jenkinsfiles dieses Repos identisch) ──────────────────────────────
+
+// SSH-Konfiguration fuer den Zielserver schreiben und ssh/scp-Wrapper anlegen.
+// Muss innerhalb von withCredentials(host-ssh-key) laufen. TARGET_HOST und TARGET_HOSTNAME
+// stehen in der environment-Sektion; PLATZHALTER fuer HostName, bis der Server festgelegt ist.
+def setupSSHConfig() {
+    sh '''
+        cat > "${WORKSPACE}/.ssh_config" << EOF
+Host ${TARGET_HOST}
+    User root
+    Port 22
+    HostName ${TARGET_HOSTNAME}
+    IdentityFile ${SSH_KEY}
+    StrictHostKeyChecking no
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    ConnectTimeout 30
+EOF
+        chmod 600 "${WORKSPACE}/.ssh_config"
+        printf '#!/bin/sh\\nexec /usr/bin/ssh -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/ssh"
+        printf '#!/bin/sh\\nexec /usr/bin/scp -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/scp"
+        chmod +x "${WORKSPACE}/ssh" "${WORKSPACE}/scp"
+    '''
+}
+
+def withHostSSH(Closure body) {
+    withCredentials([sshUserPrivateKey(credentialsId: 'host-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+        setupSSHConfig()
+        body()
+    }
+}
+
+def testConnection(String serviceName) {
+    withHostSSH {
+        sh """
+            cd "\${INFRA_DIR}"
+            \${SCENARIO_DEPLOY} \${TARGET_BASE_PATH}/${serviceName} test -h
+            ssh \${TARGET_HOST} 'echo "SSH OK: \$(hostname) / \$(uptime)"'
+        """
+    }
+}

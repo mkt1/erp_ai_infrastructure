@@ -1,0 +1,206 @@
+// Jenkinsfile.resetStage — eine Instanz auf den aktuellen Stand der Produktion (erpai) setzen
+//
+// Ein Jenkinsfile fuer zwei Jobs; welche Instanz zurueckgesetzt wird, bestimmt der Jobname:
+//   erpai-resetStage → Szenario erpai-stage (Stage) — danach stehen die Apps wieder auf staging
+//   erpai-resetDev   → Szenario erpai-dev   (Dev)   — danach stehen die Apps wieder auf dev/customer
+// Enthaelt der Jobname "dev" (Gross-/Kleinschreibung egal), ist das Ziel erpai-dev, sonst erpai-stage.
+//
+// Ablauf: frisches Prod-Backup → latest-Links erpai → <ziel> → Ziel aus dem Backup wiederherstellen →
+// Apps des Ziels auf ihre Branches heben (laut apps.json des Ziels) → ausgehende Mail des Ziels
+// stilllegen (Standard) oder, mit USE_MAILPIT=true, auf Mailpit umbiegen.
+//
+// Jenkins-Job: Pipeline from SCM → Repo mkt1/erp_ai_infrastructure, Branch main, Script Path: Jenkins/Jenkinsfile.resetStage
+//   Kein Zeit-Trigger: Der Reset ueberschreibt die Zielinstanz und wird bewusst von Hand gestartet.
+// Benoetigte Credentials:
+//   host-ssh-key          SSH-Key fuer root auf dem Zielserver
+//   mailpit-smtp-password Benutzername/Passwort fuer Mailpit — nur noetig, wenn USE_MAILPIT=true
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 3, unit: 'HOURS')
+    }
+
+    parameters {
+        // Mailpit ist optional. Ohne Mailpit wird der Mailversand des Ziels stillgelegt
+        // (mute_emails), mit Mailpit landen alle Mails des Ziels dort.
+        booleanParam(name: 'USE_MAILPIT', defaultValue: false,
+                     description: 'Mails der Zielinstanz an Mailpit schicken statt stilllegen (ein Mailpit-Szenario muss laufen)')
+    }
+
+    environment {
+        INFRA_DIR        = "${WORKSPACE}"
+        SCENARIO_DEPLOY  = "${WORKSPACE}/MIMS/scenario.deploy"
+        // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
+        // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
+        TARGET_HOST      = "ki.netcup"
+        TARGET_HOSTNAME  = "ki.netcup"
+        TARGET_BASE_PATH = "de/erpai"
+        CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
+        BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
+        // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in
+        // Jenkins der Mailversand eingerichtet ist (Jenkins verwalten → System → E-Mail).
+        NOTIFY_RECIPIENTS = ""
+        // ssh/scp-Wrapper im WORKSPACE ueberdecken die echten Binaries und erzwingen -F
+        PATH = "${env.WORKSPACE}:${env.PATH}"
+        // Zielszenario aus dem Jobnamen (siehe Kopf); die Site heisst in allen Instanzen wie die Prod
+        TARGET_SCENARIO  = "${env.JOB_NAME.toLowerCase().contains('dev') ? 'erpai-dev' : 'erpai-stage'}"
+        STAGE_BACKEND    = "${env.JOB_NAME.toLowerCase().contains('dev') ? 'erpai-dev' : 'erpai-stage'}_erpnext_backend_container"
+        // PLATZHALTER: Site-Name = SCENARIO_SITE_NAME der Szenarien (README §4)
+        STAGE_SITE       = "erp.example.de"
+        // Mailpit (optional) ueber Host-Port 1025; Adresse des Servers aus Sicht der Container
+        MAILPIT_SMTP_HOST = "172.17.0.1"
+        MAILPIT_SMTP_PORT = "1025"
+    }
+
+    stages {
+        stage('Checkout Dependencies') {
+            steps {
+                // MIMS ist Submodul dieses Repos; der SCM-Checkout liefert es nicht mit → direkt klonen
+                dir('MIMS') {
+                    git url: 'https://github.com/Cerulean-Circle-GmbH/MIMS.git', branch: 'mims2'
+                }
+            }
+        }
+
+        stage('Reset') {
+            steps {
+                script {
+                    testConnection('erpai')
+                    testConnection(env.TARGET_SCENARIO)
+
+                    withCredentials([sshUserPrivateKey(credentialsId: 'host-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                        setupSSHConfig()
+
+                        sh '''
+                            # Frisches Backup der Produktion
+                            cd "${INFRA_DIR}"
+                            ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/erpai backup -v
+                        '''
+
+                        sh '''
+                            # latest-Links: <ziel>_latest_* -> neuestes erpai_<timestamp>_*
+                            "${INFRA_DIR}/Units/backup/link-backup-files.sh" --remote ${TARGET_HOST} \
+                                --source erpai \
+                                --dest ${TARGET_SCENARIO} \
+                                --backup-dir ${BACKUP_DIR} \
+                                --latest-only \
+                                --force
+                        '''
+
+                        sh '''
+                            # Zielinstanz aus dem Prod-Backup wiederherstellen
+                            cd "${INFRA_DIR}"
+                            ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/${TARGET_SCENARIO} down,restore,up -v
+                        '''
+
+                        sh '''
+                            # Apps der Zielinstanz auf ihre Branches heben (apps.json des Ziels)
+                            cd "${INFRA_DIR}"
+                            ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/${TARGET_SCENARIO} update,down,up -v
+                        '''
+
+                        // Stage und Dev duerfen nie echte Mails verschicken — nach dem Restore
+                        // tragen sie die Mailkonten der Produktion.
+                        if (params.USE_MAILPIT) {
+                            withCredentials([usernamePassword(credentialsId: 'mailpit-smtp-password',
+                                                usernameVariable: 'MAILPIT_SMTP_USER',
+                                                passwordVariable: 'MAILPIT_SMTP_PASSWORD')]) {
+                                sh '''
+                                    "${INFRA_DIR}/Units/backup/rewire-mail-to-mailpit.sh" \
+                                        --remote "${TARGET_HOST}" \
+                                        --scenario-dir "${CONFIGS_DIR}/${TARGET_BASE_PATH}/${TARGET_SCENARIO}" \
+                                        --smtp-host "${MAILPIT_SMTP_HOST}" \
+                                        --smtp-port "${MAILPIT_SMTP_PORT}" \
+                                        --smtp-user "${MAILPIT_SMTP_USER}"
+                                '''
+                            }
+                        } else {
+                            // Ohne Mailpit: Mailversand stilllegen und das Ergebnis pruefen.
+                            sh '''
+                                ssh "${TARGET_HOST}" "docker exec ${STAGE_BACKEND} bench --site ${STAGE_SITE} set-config mute_emails 1"
+                                ssh "${TARGET_HOST}" "docker exec ${STAGE_BACKEND} bench --site ${STAGE_SITE} show-config" | grep -E "mute_emails.*1" \
+                                    || { echo "FEHLER: mute_emails ist auf ${TARGET_SCENARIO} nicht gesetzt" >&2; exit 1; }
+                                echo "✅ Mailversand von ${TARGET_SCENARIO} ist stillgelegt (mute_emails=1)."
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Benachrichtigung nur, wenn ein Empfaenger gesetzt ist; ein fehlender oder
+                // falsch eingerichteter Mailversand darf das Ergebnis des Jobs nicht kippen.
+                if (env.NOTIFY_RECIPIENTS?.trim()) {
+                    try {
+                        mail(
+                            to: env.NOTIFY_RECIPIENTS,
+                            subject: "[Jenkins] ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: "Build-Ergebnis: ${currentBuild.currentResult}\nJob: ${env.JOB_NAME} #${env.BUILD_NUMBER}\nLogs: ${env.BUILD_URL}console\n",
+                            mimeType: 'text/plain'
+                        )
+                        echo "📧 Ergebnis-Benachrichtigung (${currentBuild.currentResult}) versendet an: ${env.NOTIFY_RECIPIENTS}"
+                    } catch (err) {
+                        echo "⚠️ Benachrichtigung konnte nicht versendet werden: ${err}"
+                    }
+                } else {
+                    echo 'Keine Benachrichtigung: NOTIFY_RECIPIENTS ist leer.'
+                }
+            }
+        }
+        failure {
+            echo '⚠️  Pipeline fehlgeschlagen! Bitte Logs pruefen.'
+        }
+        success {
+            echo '✅ Pipeline erfolgreich abgeschlossen.'
+        }
+    }
+}
+
+// ── Hilfsfunktionen (in allen Jenkinsfiles dieses Repos identisch) ──────────────────────────────
+
+// SSH-Konfiguration fuer den Zielserver schreiben und ssh/scp-Wrapper anlegen.
+// Muss innerhalb von withCredentials(host-ssh-key) laufen. TARGET_HOST und TARGET_HOSTNAME
+// stehen in der environment-Sektion; PLATZHALTER fuer HostName, bis der Server festgelegt ist.
+def setupSSHConfig() {
+    sh '''
+        cat > "${WORKSPACE}/.ssh_config" << EOF
+Host ${TARGET_HOST}
+    User root
+    Port 22
+    HostName ${TARGET_HOSTNAME}
+    IdentityFile ${SSH_KEY}
+    StrictHostKeyChecking no
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    ConnectTimeout 30
+EOF
+        chmod 600 "${WORKSPACE}/.ssh_config"
+        printf '#!/bin/sh\\nexec /usr/bin/ssh -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/ssh"
+        printf '#!/bin/sh\\nexec /usr/bin/scp -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/scp"
+        chmod +x "${WORKSPACE}/ssh" "${WORKSPACE}/scp"
+    '''
+}
+
+def withHostSSH(Closure body) {
+    withCredentials([sshUserPrivateKey(credentialsId: 'host-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+        setupSSHConfig()
+        body()
+    }
+}
+
+def testConnection(String serviceName) {
+    withHostSSH {
+        sh """
+            cd "\${INFRA_DIR}"
+            \${SCENARIO_DEPLOY} \${TARGET_BASE_PATH}/${serviceName} test -h
+            ssh \${TARGET_HOST} 'echo "SSH OK: \$(hostname) / \$(uptime)"'
+        """
+    }
+}

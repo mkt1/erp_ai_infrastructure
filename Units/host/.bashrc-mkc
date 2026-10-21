@@ -1,0 +1,18 @@
+# `ls' colorized:
+export LS_OPTIONS='--color=auto'
+eval "$(dircolors)"
+alias ls='ls $LS_OPTIONS'
+alias ll='ls $LS_OPTIONS -l'
+alias l='ls $LS_OPTIONS -lA'
+
+# Some more alias to avoid making mistakes:
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+
+# Some useful aliases for docker:
+alias dpsi='docker ps -a --format "table ☞   {{.ID}}\t{{.Image}}\t{{.Names}}\t{{.Status}}" | (read -r; printf "%s\n" "$REPLY"; sort -k 3 )'
+alias dpsn='docker ps -a --format "table ☞   {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}" | (read -r; printf "%s\n" "$REPLY"; sort -k 3 )'
+alias dils='docker image ls --format "table ☞   {{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}"'
+alias dvls='docker volume ls --format "table ☞   {{.Name}}"'
+alias dall='echo "Containers:" ; dpsn ; echo "Images:" ; dils ; echo "Volumes:" ; dvls'

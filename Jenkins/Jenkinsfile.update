@@ -1,0 +1,205 @@
+// Jenkinsfile.update — spielt den Stand aus dem Repository auf eine ERPNext-Instanz von ERP AI
+//
+// Ein Jenkinsfile fuer drei Jobs; welche Instanz aktualisiert wird, bestimmt der Jobname:
+//   erpai-update-prod  → Szenario erpai        (Produktiv, Branch main)
+//   erpai-update-stage → Szenario erpai-stage  (Stage,     Branch staging)
+//   erpai-update-dev   → Szenario erpai-dev    (Dev,       Branch dev/customer)
+// Enthaelt der Jobname "prod", wird die Produktion aktualisiert; "dev" die Dev-Instanz; sonst die Stage.
+// Fuer den Alltag auf der Dev-Instanz gibt es den leichten Job erpai-deploy-customer (Jenkinsfile.deploy);
+// dieser Job hier ist das volle Upgrade. Kein Zeit-Trigger: Ein Update wird bewusst von Hand gestartet.
+//
+// Ablauf:
+//   1. Verbindung pruefen
+//   2. Volle Sicherung der Instanz (wie der Backup-Job) — vor jeder Aenderung
+//   3. init     Szenario und Komponente aus dem Repo (Branch main) auf den Server uebertragen
+//      update   Images ziehen/bauen und das Upgrade vormerken
+//      down,up  Neustart; dabei laeuft das Upgrade: Datenbank-Backup, Apps auf den Stand aus
+//               apps.json, Abhaengigkeiten, bench build, migrate, Cache leeren
+//   4. Pruefen, ob die Instanz wieder antwortet
+// Waehrend Schritt 3 ist die Instanz einige Minuten nicht erreichbar.
+//
+// Jenkins-Job: Pipeline from SCM → Repo mkt1/erp_ai_infrastructure, Branch main, Script Path: Jenkins/Jenkinsfile.update
+// Benoetigte Credentials: host-ssh-key
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 2, unit: 'HOURS')
+    }
+
+    environment {
+        INFRA_DIR        = "${WORKSPACE}"
+        SCENARIO_DEPLOY  = "${WORKSPACE}/MIMS/scenario.deploy"
+        // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
+        // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
+        TARGET_HOST      = "ki.netcup"
+        TARGET_HOSTNAME  = "ki.netcup"
+        TARGET_BASE_PATH = "de/erpai"
+        CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
+        BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
+        // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in
+        // Jenkins der Mailversand eingerichtet ist (Jenkins verwalten → System → E-Mail).
+        NOTIFY_RECIPIENTS = ""
+        // ssh/scp-Wrapper im WORKSPACE ueberdecken die echten Binaries und erzwingen -F
+        PATH = "${env.WORKSPACE}:${env.PATH}"
+        // Szenario und Adresse aus dem Jobnamen (siehe Kopf). PLATZHALTER-Domains: README §4
+        UPDATE_SERVICE   = "${env.JOB_NAME.contains('prod') ? 'erpai' : (env.JOB_NAME.contains('dev') ? 'erpai-dev' : 'erpai-stage')}"
+        UPDATE_URL       = "${env.JOB_NAME.contains('prod') ? 'https://erp.example.de' : (env.JOB_NAME.contains('dev') ? 'https://erp-dev.example.de' : 'https://erp-stage.example.de')}"
+    }
+
+    stages {
+        stage('Checkout Dependencies') {
+            steps {
+                // MIMS ist Submodul dieses Repos; der SCM-Checkout liefert es nicht mit → direkt klonen
+                dir('MIMS') {
+                    git url: 'https://github.com/Cerulean-Circle-GmbH/MIMS.git', branch: 'mims2'
+                }
+            }
+        }
+
+        stage('Sicherung vor dem Update') {
+            steps {
+                script {
+                    echo "Aktualisiere Szenario ${env.UPDATE_SERVICE} (${env.UPDATE_URL})"
+                    testConnection(env.UPDATE_SERVICE)
+                    withHostSSH {
+                        sh '''
+                            cd "${INFRA_DIR}"
+                            ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/${UPDATE_SERVICE} backup -v
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Update') {
+            steps {
+                script {
+                    withHostSSH {
+                        sh '''
+                            cd "${INFRA_DIR}"
+                            ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/${UPDATE_SERVICE} init -v
+
+                            # Ist der Stand aus dem Repo wirklich auf dem Server angekommen?
+                            # scenario.deploy meldet auch dann Erfolg, wenn die Uebertragung scheitert
+                            # (z. B. rsync oder das richtige yq fehlen im Jenkins-Image).
+                            REMOTE_DIR="${CONFIGS_DIR}/${TARGET_BASE_PATH}/${UPDATE_SERVICE}"
+                            for pair in \
+                                "Components/de/erpai/erpnext/16.x/install_upgrade_apps.sh:install_upgrade_apps.sh" \
+                                "Scenarios/${TARGET_BASE_PATH}/${UPDATE_SERVICE}/apps.json:apps.json"; do
+                                lokal="${pair%%:*}"; remote="${pair##*:}"
+                                a=$(sha256sum "${lokal}" | cut -d' ' -f1)
+                                b=$(ssh ${TARGET_HOST} "sha256sum ${REMOTE_DIR}/${remote}" | cut -d' ' -f1)
+                                if [ "$a" != "$b" ]; then
+                                    echo "FEHLER: ${remote} auf dem Server entspricht nicht dem Repo — init hat nicht uebertragen" >&2
+                                    exit 1
+                                fi
+                            done
+                            echo "✅ Stand aus dem Repo ist auf dem Server angekommen."
+
+                            ${SCENARIO_DEPLOY} ${TARGET_BASE_PATH}/${UPDATE_SERVICE} update,down,up -v
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Pruefen') {
+            steps {
+                script {
+                    withHostSSH {
+                        // Das Upgrade laeuft im Container create-site; scheitert es, bleibt die
+                        // Markierung stehen und der Container endet mit Fehler.
+                        sh '''
+                            ssh ${TARGET_HOST} "docker inspect -f '{{.State.ExitCode}}' ${UPDATE_SERVICE}_erpnext_create-site_container" | grep -qx 0 \
+                                || { echo "FEHLER: Das Upgrade (create-site) ist mit Fehler beendet — docker logs ${UPDATE_SERVICE}_erpnext_create-site_container" >&2; exit 1; }
+                            ssh ${TARGET_HOST} "docker exec ${UPDATE_SERVICE}_erpnext_backend_container test ! -f sites/.run-app-upgrade" \
+                                || { echo "FEHLER: Die Upgrade-Markierung steht noch — das Upgrade ist nicht durchgelaufen" >&2; exit 1; }
+                            for i in $(seq 1 30); do
+                                code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${UPDATE_URL}/api/method/ping" || true)
+                                [ "$code" = "200" ] && { echo "✅ ${UPDATE_URL} antwortet."; exit 0; }
+                                sleep 10
+                            done
+                            echo "FEHLER: ${UPDATE_URL} antwortet nach dem Update nicht (zuletzt HTTP ${code})" >&2
+                            exit 1
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Benachrichtigung nur, wenn ein Empfaenger gesetzt ist; ein fehlender oder
+                // falsch eingerichteter Mailversand darf das Ergebnis des Jobs nicht kippen.
+                if (env.NOTIFY_RECIPIENTS?.trim()) {
+                    try {
+                        mail(
+                            to: env.NOTIFY_RECIPIENTS,
+                            subject: "[Jenkins] ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: "Build-Ergebnis: ${currentBuild.currentResult}\nJob: ${env.JOB_NAME} #${env.BUILD_NUMBER}\nLogs: ${env.BUILD_URL}console\n",
+                            mimeType: 'text/plain'
+                        )
+                        echo "📧 Ergebnis-Benachrichtigung (${currentBuild.currentResult}) versendet an: ${env.NOTIFY_RECIPIENTS}"
+                    } catch (err) {
+                        echo "⚠️ Benachrichtigung konnte nicht versendet werden: ${err}"
+                    }
+                } else {
+                    echo 'Keine Benachrichtigung: NOTIFY_RECIPIENTS ist leer.'
+                }
+            }
+        }
+        failure {
+            echo '⚠️  Pipeline fehlgeschlagen! Bitte Logs pruefen.'
+        }
+        success {
+            echo '✅ Pipeline erfolgreich abgeschlossen.'
+        }
+    }
+}
+
+// ── Hilfsfunktionen (in allen Jenkinsfiles dieses Repos identisch) ──────────────────────────────
+
+// SSH-Konfiguration fuer den Zielserver schreiben und ssh/scp-Wrapper anlegen.
+// Muss innerhalb von withCredentials(host-ssh-key) laufen. TARGET_HOST und TARGET_HOSTNAME
+// stehen in der environment-Sektion; PLATZHALTER fuer HostName, bis der Server festgelegt ist.
+def setupSSHConfig() {
+    sh '''
+        cat > "${WORKSPACE}/.ssh_config" << EOF
+Host ${TARGET_HOST}
+    User root
+    Port 22
+    HostName ${TARGET_HOSTNAME}
+    IdentityFile ${SSH_KEY}
+    StrictHostKeyChecking no
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    ConnectTimeout 30
+EOF
+        chmod 600 "${WORKSPACE}/.ssh_config"
+        printf '#!/bin/sh\\nexec /usr/bin/ssh -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/ssh"
+        printf '#!/bin/sh\\nexec /usr/bin/scp -F "%s/.ssh_config" "$@"\\n' "${WORKSPACE}" > "${WORKSPACE}/scp"
+        chmod +x "${WORKSPACE}/ssh" "${WORKSPACE}/scp"
+    '''
+}
+
+def withHostSSH(Closure body) {
+    withCredentials([sshUserPrivateKey(credentialsId: 'host-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+        setupSSHConfig()
+        body()
+    }
+}
+
+def testConnection(String serviceName) {
+    withHostSSH {
+        sh """
+            cd "\${INFRA_DIR}"
+            \${SCENARIO_DEPLOY} \${TARGET_BASE_PATH}/${serviceName} test -h
+            ssh \${TARGET_HOST} 'echo "SSH OK: \$(hostname) / \$(uptime)"'
+        """
+    }
+}
