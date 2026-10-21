@@ -17,6 +17,7 @@
 | Dokument | Inhalt |
 |---|---|
 | README.md (diese Datei) | Was laeuft, wie es zusammenhaengt, Aufsetzen, Alltag, Jenkins-Jobs |
+| [docs/SETUP.md](docs/SETUP.md) | **Das aktuelle Setup konkret** (Server, Szenarien, Apps, Geheimnisse, Jobs) und der Neuaufbau mit `./bootstrap.sh` |
 | [docs/01_Erfolgskriterien.md](docs/01_Erfolgskriterien.md) | Was dieses Repo leisten muss (Messlatte) |
 | [docs/02_Konzept.md](docs/02_Konzept.md) | Entscheidungen: Namen, Branches, Umgebungen, Server |
 | [docs/03_Umsetzungsplan.md](docs/03_Umsetzungsplan.md) | Abhakbarer Plan, Stand der Umsetzung |
@@ -249,6 +250,7 @@ entsteht automatisch, Skill `/release` in der App) → `erpai-update-prod`.
 ```
 erp_ai_infrastructure/
 ├── README.md                          dieses Handbuch
+├── bootstrap.sh                       Neuaufbau in Reihenfolge (docs/SETUP.md §6)
 ├── docs/                              01–05 (Erfolgskriterien, Konzept, Plan, Servercheck, Pruefung), HERKUNFT
 ├── scenario.deploy                    Stub → MIMS/scenario.deploy (Submodul)
 ├── MIMS/                              Submodul Cerulean-Circle-GmbH/MIMS, Branch mims2
