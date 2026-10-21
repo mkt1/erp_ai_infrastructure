@@ -3,3 +3,5 @@
 _scenarios/
 # Lokale SSH-Konfiguration (Vorlage: ssh-config.example)
 ssh-config
+# Zwischenstaende von scenario.deploy
+*.scenario.env.tmp
