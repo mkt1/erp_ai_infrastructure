@@ -71,9 +71,10 @@ fi
 # ── 2.3 Verzeichnisse ─────────────────────────────────────────────────────────
 echo "── 2.3 Verzeichnisse unter ${BASE_DIR}"
 # Das Backup-Verzeichnis gehoert frappe (uid ${FRAPPE_UID}): 'bench backup' schreibt als dieser Benutzer hinein.
+# ${SECRETS_DIR} selbst wird auf einem geteilten Server von anderen Szenarien mitbenutzt — seine Rechte
+# bleiben, wie sie sind; nur die eigenen Unterordner werden angelegt und abgeschottet.
 if rsh "$RSUDO mkdir -p ${BACKUP_DIR} ${FRAPPE_SECRETS_DIR}/.ssh ${TRAEFIK_SECRETS_DIR} ${JENKINS_SECRETS_DIR} \
-        && $RSUDO chmod 700 ${SECRETS_DIR} ${TRAEFIK_SECRETS_DIR} ${JENKINS_SECRETS_DIR} \
-        && $RSUDO chmod 711 ${SECRETS_DIR} \
+        && $RSUDO chmod 700 ${TRAEFIK_SECRETS_DIR} ${JENKINS_SECRETS_DIR} \
         && $RSUDO chown ${FRAPPE_UID}:${FRAPPE_UID} ${BACKUP_DIR}"; then
     echo "✅ ${BACKUP_DIR}, ${FRAPPE_SECRETS_DIR}/.ssh, ${TRAEFIK_SECRETS_DIR}, ${JENKINS_SECRETS_DIR}"
 else
@@ -131,6 +132,42 @@ else
     mark_warning
     TODOS+=("Deploy-Key bei GitHub eintragen: ${APP_REPO_KEYS_URL} — danach dieses Skript erneut laufen lassen")
 fi
+
+# ── 2.4b Weitere private App-Repos (EXTRA_PRIVATE_APPS) ───────────────────────
+# GitHub laesst einen Deploy-Key nur an genau einem Repo zu. Deshalb je Repo ein eigener Schluessel und ein
+# SSH-Alias github_<name> in der ssh-config des Containers; apps.json nutzt git@github_<name>:<owner>/<name>.git
+for repo in ${EXTRA_PRIVATE_APPS:-}; do
+    name="${repo##*/}"; alias="github_${name}"; xkey="${FRAPPE_SECRETS_DIR}/.ssh/id_ed25519_${name}"
+    echo "── 2.4b Deploy-Key fuer ${repo} (Alias ${alias})"
+    rsh "set -e
+if [ ! -f ${xkey} ]; then
+    $RSUDO ssh-keygen -q -t ed25519 -N '' -C 'deploy-key-${name}@${SSHCONFIG}' -f ${xkey}
+    echo '   Neuer Deploy-Key erzeugt.'
+else
+    echo '   Deploy-Key vorhanden, wird nicht ueberschrieben.'
+fi
+if ! grep -qs '^Host ${alias}\$' ${FRAPPE_SECRETS_DIR}/.ssh/config; then
+    printf '\nHost ${alias}\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/id_ed25519_${name}\n    IdentitiesOnly yes\n    StrictHostKeyChecking yes\n' | $RSUDO tee -a ${FRAPPE_SECRETS_DIR}/.ssh/config >/dev/null
+fi
+$RSUDO chown ${FRAPPE_UID}:${FRAPPE_UID} ${xkey} ${xkey}.pub ${FRAPPE_SECRETS_DIR}/.ssh/config
+$RSUDO chmod 600 ${xkey} ${FRAPPE_SECRETS_DIR}/.ssh/config; $RSUDO chmod 644 ${xkey}.pub
+" || { echo "❌ Deploy-Key fuer ${repo} konnte nicht eingerichtet werden."; mark_failure; continue; }
+    if rsh "$RSUDO env GIT_SSH_COMMAND='ssh -i ${xkey} -o IdentitiesOnly=yes -o UserKnownHostsFile=${FRAPPE_SECRETS_DIR}/.ssh/known_hosts -o StrictHostKeyChecking=yes' git ls-remote --heads git@github.com:${repo}.git >/dev/null 2>&1"; then
+        echo "✅ Deploy-Key hat Zugriff auf ${repo}."
+    elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        tmp="$(mktemp)"; rsh "cat ${xkey}.pub" > "$tmp"
+        if gh repo deploy-key add "$tmp" -R "${repo}" -t "ERPNext-Server ${SSHCONFIG} / ERP AI (nur lesend)"; then
+            echo "✅ Deploy-Key per gh bei GitHub eingetragen (nur lesend)."
+        else
+            echo "⚠️ Deploy-Key konnte nicht per gh eingetragen werden — von Hand: https://github.com/${repo}/settings/keys"; mark_warning
+            TODOS+=("Deploy-Key bei GitHub eintragen: https://github.com/${repo}/settings/keys — danach dieses Skript erneut laufen lassen")
+        fi
+        rm -f "$tmp"
+    else
+        echo "⚠️ Deploy-Key fuer ${repo} ist bei GitHub noch nicht hinterlegt:"; rsh "cat ${xkey}.pub" | sed 's/^/      /'; mark_warning
+        TODOS+=("Deploy-Key bei GitHub eintragen: https://github.com/${repo}/settings/keys")
+    fi
+done
 
 # ── 2.5 Administrator-Kennwort der ERPNext-Sites ──────────────────────────────
 echo "── 2.5 Administrator-Kennwort fuer ERPNext (${FRAPPE_SECRETS_DIR}/admin_password)"
@@ -196,7 +233,6 @@ echo "── 2.8 DNS: zeigen die Namen auf diesen Server?"
 PUBLIC_IP="$(rsh "curl -4 -s --max-time 8 https://api.ipify.org || true")"
 echo "   Oeffentliche Adresse des Servers: ${PUBLIC_IP:-unbekannt}"
 for d in $DOMAINS; do
-    case "$d" in *example.de) echo "⚠️ ${d}: PLATZHALTER — Domain noch festlegen (README §4)"; mark_warning; continue ;; esac
     ip="$(dig +short A "$d" | tail -1)"
     if [ -z "$ip" ]; then
         echo "❌ ${d}: kein DNS-Eintrag"; mark_failure

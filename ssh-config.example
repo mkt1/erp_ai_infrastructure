@@ -4,7 +4,7 @@
 #
 # PLATZHALTER: HostName, Benutzer und Schluessel an den Zielserver anpassen. Soll ein anderer
 # Server als ki.netcup genutzt werden, den Alias in erpai.host.conf und in allen
-# Scenarios/de/erpai/*.scenario.env ersetzen (ein sed-Aufruf, siehe README §5).
+# Scenarios/de/matthiaskittner/ki/*.scenario.env ersetzen (ein sed-Aufruf, siehe README §5).
 Host ki.netcup
     HostName <server-adresse>
     User root

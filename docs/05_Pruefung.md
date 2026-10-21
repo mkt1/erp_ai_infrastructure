@@ -9,7 +9,7 @@
 
 | Nr. | Ergebnis | Nachweis |
 |---|---|---|
-| EK-01 | ✅ | fuenf `*.scenario.env` unter `Scenarios/de/erpai/`: erpai, erpai-stage, erpai-dev, erpai-jenkins, traefik |
+| EK-01 | ✅ | fuenf `*.scenario.env` unter `Scenarios/de/matthiaskittner/ki/`: erpai, erpai-stage, erpai-dev, erpai-jenkins, traefik |
 | EK-02 | ✅ | `Components/de/erpai/erpnext/16.x/` (17 Dateien); `.gitmodules`: MIMS Branch `mims2` |
 | EK-03 | ✅ | `apps.json`: erpai → `main`, erpai-stage → `staging`, erpai-dev → `dev/customer` |
 | EK-04 | ✅ | vier Jenkinsfiles; `jenkins-setup.groovy` legt neun Jobs an (3× backup, 3× update, resetStage, resetDev, deploy-customer) |

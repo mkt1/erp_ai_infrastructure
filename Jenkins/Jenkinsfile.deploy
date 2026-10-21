@@ -37,8 +37,8 @@ pipeline {
         // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
         // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
         TARGET_HOST      = "ki.netcup"
-        TARGET_HOSTNAME  = "ki.netcup"
-        TARGET_BASE_PATH = "de/erpai"
+        TARGET_HOSTNAME  = "ki.matthiaskittner.de"
+        TARGET_BASE_PATH = "de/matthiaskittner/ki"
         CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
         BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
         // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in
@@ -52,10 +52,10 @@ pipeline {
         SCENARIO         = "erpai-dev"
         BACKEND          = "erpai-dev_erpnext_backend_container"
         // PLATZHALTER: Site und Adresse der Dev-Instanz (README §4)
-        SITE             = "erp.example.de"
-        TARGET_URL       = "https://erp-dev.example.de"
+        SITE             = "erpai.ki.matthiaskittner.de"
+        TARGET_URL       = "https://erpai-dev.ki.matthiaskittner.de"
         // Merkt sich auf dem Server, welcher Commit zuletzt ausgerollt wurde (fuer die Aenderungsliste)
-        STATE_FILE       = "/var/dev/MIMS-Scenarios/de/erpai/erpai-dev/.deployed-commit"
+        STATE_FILE       = "/var/dev/MIMS-Scenarios/de/matthiaskittner/ki/erpai-dev/.deployed-commit"
     }
 
     stages {

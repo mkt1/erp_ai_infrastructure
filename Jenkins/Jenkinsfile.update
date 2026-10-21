@@ -35,8 +35,8 @@ pipeline {
         // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
         // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
         TARGET_HOST      = "ki.netcup"
-        TARGET_HOSTNAME  = "ki.netcup"
-        TARGET_BASE_PATH = "de/erpai"
+        TARGET_HOSTNAME  = "ki.matthiaskittner.de"
+        TARGET_BASE_PATH = "de/matthiaskittner/ki"
         CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
         BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
         // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in
@@ -46,7 +46,7 @@ pipeline {
         PATH = "${env.WORKSPACE}:${env.PATH}"
         // Szenario und Adresse aus dem Jobnamen (siehe Kopf). PLATZHALTER-Domains: README §4
         UPDATE_SERVICE   = "${env.JOB_NAME.contains('prod') ? 'erpai' : (env.JOB_NAME.contains('dev') ? 'erpai-dev' : 'erpai-stage')}"
-        UPDATE_URL       = "${env.JOB_NAME.contains('prod') ? 'https://erp.example.de' : (env.JOB_NAME.contains('dev') ? 'https://erp-dev.example.de' : 'https://erp-stage.example.de')}"
+        UPDATE_URL       = "${env.JOB_NAME.contains('prod') ? 'https://erpai.ki.matthiaskittner.de' : (env.JOB_NAME.contains('dev') ? 'https://erpai-dev.ki.matthiaskittner.de' : 'https://erpai-stage.ki.matthiaskittner.de')}"
     }
 
     stages {

@@ -13,8 +13,8 @@ aus `schmidtundtoechter/erpnext_infrastructure` (Komponente, Units) und `sut_app
 | `Units/host/erpai.host.conf`, `setup-host-erpai.sh` | dito `cleanunit.host.conf`, `setup-host-cleanunit.sh` | Namen, Pfade, Platzhalter; Deploy-Key wird per `gh` eingetragen; Traefik-Erkennung; Pruefung freier Szenario-Namen; Pruefung des **freien** RAM |
 | `Units/jenkins/*` | dito `Units/jenkins/` | Namen (`erpai-*`, `customer`), Jenkins liest dieses Repo (voller Checkout statt Sparse), Benutzername aus `erpai.host.conf` |
 | `Jenkins/Jenkinsfile.backup`, `.update`, `.resetStage`, `.deploy` | dito `Jenkins/` | Namen, Pfade relativ zur Wurzel (`INFRA_DIR`), gemeinsame `environment`-Werte, Server als Variable (`TARGET_HOSTNAME`), ohne Sage-VPN |
-| `Scenarios/de/erpai/*.scenario.env` | dito `Scenarios/de/cleanunit/` | Werte fuer ERP AI (Platzhalter), Ports 8180–8182 / 8190, Volume-Praefixe |
-| `Scenarios/de/erpai/erpai-jenkins/Dockerfile` | dito `jenkins/Dockerfile` (MIMS `io/jenkins/2.x.1` plus rsync und yq v4) | Kommentar |
+| `Scenarios/de/matthiaskittner/ki/*.scenario.env` | dito `Scenarios/de/cleanunit/` | Werte fuer ERP AI (Platzhalter), Ports 8180–8182 / 8190, Volume-Praefixe |
+| `Scenarios/de/matthiaskittner/ki/erpai-jenkins/Dockerfile` | dito `jenkins/Dockerfile` (MIMS `io/jenkins/2.x.1` plus rsync und yq v4) | Kommentar |
 | `scenario.deploy` | `schmidtundtoechter/metralabs_infrastructure` | keine |
 | `README.md` | dito `betrieb/README.md` | verallgemeinert, Abschnitte Server (§4) und Platzhalter (§5) neu |
 | **nicht uebernommen** | `Jenkinsfile.sageVpnTest`, `withSageVPN.groovy`, `Units/vpn/`, `05_Sage-VPN.md`, Mailpit-Szenario | kundenspezifisch bzw. nicht beauftragt |

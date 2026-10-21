@@ -9,8 +9,8 @@
 >
 > **Keine Zugangsdaten in diesem Repo.** Kennwoerter und Schluessel liegen nur auf dem Server (§3).
 >
-> **PLATZHALTER (§4):** Server und Domains sind noch nicht festgelegt. Eingetragen sind `ki.netcup`
-> (SSH-Alias) und `*.example.de`. Was beim Festlegen zu aendern ist, steht in §5.
+> **Server:** `ki.netcup` (Entscheidung nach Servercheck, §4), Domains `*.ki.matthiaskittner.de`, Namensraum
+> `de/matthiaskittner/ki` wie die anderen Szenarien dort. Umzug auf einen anderen Server: §5.
 
 ## Dokumentation
 
@@ -28,23 +28,23 @@
 
 ## 1. Was laeuft
 
-| Dienst (Szenario) | Adresse (Platzhalter) | Branch der App | Zweck |
+| Dienst (Szenario) | Adresse | Branch der App | Zweck |
 |---|---|---|---|
-| **ERPNext Produktiv** (`erpai`) | https://erp.example.de | `main` | Produktivsystem |
-| **ERPNext Stage** (`erpai-stage`) | https://erp-stage.example.de | `staging` | Vorstufe: hier prueft der Developer, bevor es produktiv geht |
-| **ERPNext Dev** (`erpai-dev`) | https://erp-dev.example.de (Badge CUSTOMER) | `dev/customer` | Entwicklungsinstanz der **Customer-Umgebung** — hier baut der Kunde mit Claude |
-| **Jenkins** (`erpai-jenkins`) | https://jenkins.example.de/jenkins/ | — | naechtliches Backup, Updates, Reset, Deploy auf Dev |
-| Traefik (`traefik`) | https://traefik.example.de/dashboard/ | — | **optional**: nur auf einem eigenen Server; ki.netcup und kittner.netcup haben schon einen |
+| **ERPNext Produktiv** (`erpai`) | https://erpai.ki.matthiaskittner.de | `main` | Produktivsystem |
+| **ERPNext Stage** (`erpai-stage`) | https://erpai-stage.ki.matthiaskittner.de | `staging` | Vorstufe: hier prueft der Developer, bevor es produktiv geht |
+| **ERPNext Dev** (`erpai-dev`) | https://erpai-dev.ki.matthiaskittner.de (Badge CUSTOMER) | `dev/customer` | Entwicklungsinstanz der **Customer-Umgebung** — hier baut der Kunde mit Claude |
+| **Jenkins** (`erpai-jenkins`) | https://erpai-jenkins.ki.matthiaskittner.de/jenkins/ | — | naechtliches Backup, Updates, Reset, Deploy auf Dev |
+| Traefik (`traefik`) | — | — | **optional**, nur auf einem eigenen Server; auf ki.netcup wird der vorhandene Traefik (`ki.matthiaskittner.de`) mitbenutzt |
 
 Die Jenkins-Adresse braucht den Pfad `/jenkins/` — ohne ihn kommt 404.
 
 ## 2. Wie es zusammenhaengt
 
 ```
-Internet ──80/443──▶ Traefik ──┬─▶ erp.example.de        ▶ ERPNext Produktiv  (Volumes erpai_*)
-                               ├─▶ erp-stage.example.de  ▶ ERPNext Stage      (Volumes erpai-stage_*)
-                               ├─▶ erp-dev.example.de    ▶ ERPNext Dev        (Volumes erpai-dev_*)
-                               └─▶ jenkins.example.de    ▶ Jenkins ──SSH──▶ Host (Backup, Reset, Deploy)
+Internet ──80/443──▶ Traefik ──┬─▶ erpai.ki.matthiaskittner.de        ▶ ERPNext Produktiv  (Volumes erpai_*)
+                               ├─▶ erpai-stage.ki.matthiaskittner.de  ▶ ERPNext Stage      (Volumes erpai-stage_*)
+                               ├─▶ erpai-dev.ki.matthiaskittner.de    ▶ ERPNext Dev        (Volumes erpai-dev_*)
+                               └─▶ erpai-jenkins.ki.matthiaskittner.de    ▶ Jenkins ──SSH──▶ Host (Backup, Reset, Deploy)
 
 Claude (Customer-Umgebung) ──push dev/customer──▶ GitHub mkt1/erp_ai_app ──Polling / REST──▶ Jenkins erpai-deploy-customer ──▶ Dev
 Claude (Developer-Umgebung) ──PR merge──▶ staging / main ──▶ Jenkins erpai-update-stage / -prod ──▶ Stage / Produktiv
@@ -52,11 +52,11 @@ Claude (Developer-Umgebung) ──PR merge──▶ staging / main ──▶ Jen
 
 - Alle Dienste laufen als Docker-Container und haengen im Docker-Netz `traefik`. Nach aussen offen sind nur 80 und 443.
 - Ausgerollt wird mit **MIMS** (`./scenario.deploy`, Submodul `MIMS/`, Branch `mims2`) vom eigenen Rechner aus, per SSH.
-  Ein **Szenario** ist eine Konfigurationsdatei unter `Scenarios/de/erpai/`, eine **Komponente** die Bauanleitung
+  Ein **Szenario** ist eine Konfigurationsdatei unter `Scenarios/de/matthiaskittner/ki/`, eine **Komponente** die Bauanleitung
   dahinter (ERPNext: hier im Repo unter `Components/`; Traefik und Jenkins: aus MIMS).
 - ERPNext ist Frappe/ERPNext **Version 16** plus die App **`erp_ai_app`** (privates Repo `mkt1/erp_ai_app`).
-  Welche Instanz welchen Branch zieht, steht in `Scenarios/de/erpai/<szenario>/apps.json`.
-- **Alle drei Sites heissen intern gleich** (`SCENARIO_SITE_NAME`, heute `erp.example.de`). Das ist Absicht: Beim
+  Welche Instanz welchen Branch zieht, steht in `Scenarios/de/matthiaskittner/ki/<szenario>/apps.json`.
+- **Alle drei Sites heissen intern gleich** (`SCENARIO_SITE_NAME`, heute `erpai.ki.matthiaskittner.de`). Das ist Absicht: Beim
   Zuruecksetzen wird der Bestand der Produktion kopiert, samt Site-Ordner. Unterschieden wird ueber die Adresse.
 - **Entwicklermodus:** Produktiv aus, Stage und Dev an (`SCENARIO_ERPNEXT_DEVELOPERMODE`).
 
@@ -77,14 +77,14 @@ Die Regeln dazu stehen in `erp_ai_app/CLAUDE.md`; die Skripte in `erp_ai_app/scr
 
 Alle Werte stehen in [Units/host/erpai.host.conf](Units/host/erpai.host.conf) und in den Szenarien.
 
-| Was | Wert (Platzhalter) |
+| Was | Wert |
 |---|---|
 | SSH-Config-Name | `ki.netcup` (Vorlage: [ssh-config.example](ssh-config.example)) |
 | Ablage auf dem Server | `/var/dev/MIMS-Scenarios` |
-| Szenarien auf dem Server | `/var/dev/MIMS-Scenarios/de/erpai/<name>/` |
+| Szenarien auf dem Server | `/var/dev/MIMS-Scenarios/de/matthiaskittner/ki/<name>/` |
 | Backups | `/var/dev/MIMS-Scenarios/_backups` |
-| Namen (DNS) | `erp`, `erp-stage`, `erp-dev`, `jenkins`, `traefik` — jeweils `.example.de` |
-| App | `git@github.com:mkt1/erp_ai_app.git`, Branches `main` / `staging` / `dev/customer` |
+| Namen (DNS) | `erpai`, `erpai-stage`, `erpai-dev`, `erpai-jenkins` — jeweils `.ki.matthiaskittner.de` (Wildcard zeigt auf den Server) |
+| Apps | `erp_ai_app` (`main` / `staging` / `dev/customer`), `sut_app_tax` (`main`, privat, eigener Deploy-Key, Alias `github_sut_app_tax`), `pdf_a_3` (`main`, oeffentlich) — je Instanz in `apps.json` |
 
 **Kennwoerter und Schluessel — nur auf dem Server**, unter `/var/dev/MIMS-Scenarios/_secrets/`. Erzeugt vom
 Host-Skript, zufaellig, bei erneutem Lauf nie ueberschrieben:
@@ -92,7 +92,7 @@ Host-Skript, zufaellig, bei erneutem Lauf nie ueberschrieben:
 | Zweck | Datei |
 |---|---|
 | ERPNext, Benutzer `Administrator` (alle drei Instanzen) | `frappe/admin_password` |
-| Deploy-Key fuer die App (bei GitHub nur lesend eingetragen) | `frappe/.ssh/id_ed25519_erp_ai_app` |
+| Deploy-Keys fuer die privaten Apps (bei GitHub nur lesend eingetragen) | `frappe/.ssh/id_ed25519_erp_ai_app`, `frappe/.ssh/id_ed25519_sut_app_tax` |
 | Schluessel Jenkins → Host (Credential `host-ssh-key`) | `jenkins/host-ssh-key` |
 | Deploy-Key fuer dieses Repo (Credential `infra-repo-key`) | `jenkins/infra-repo-key` |
 | Jenkins-Benutzer der Customer-Umgebung (Kennwort, API-Token) | `jenkins/customer_password`, `jenkins/customer_api_token` |
@@ -118,19 +118,20 @@ Jenkins ~0,7 GB. **Empfehlung: ki.netcup**, vorhandenen Traefik mitbenutzen, Sze
 Deshalb sind die Szenarien so benannt, dass sie mit dem Bestand dort nicht kollidieren (`erpai*` statt `erp`,
 `erpai-jenkins` statt `jenkins`), und `traefik` ist optional (`SCENARIOS_OPTIONAL` in `erpai.host.conf`).
 
-## 5. Platzhalter ersetzen, wenn Server und Domain feststehen
+## 5. Umzug auf einen anderen Server oder eine andere Domain
 
-Server-Alias (Beispiel: `ki.netcup` → `erpai.server`) und Domain (`example.de` → `meine-domain.de`):
+Server-Alias (Beispiel: `ki.netcup` → `erpai.server`) und Domain (`ki.matthiaskittner.de` → `meine-domain.de`):
 
 ```bash
-grep -rl --exclude-dir=.git --exclude-dir=MIMS --exclude-dir=erp_ai_app -E 'ki\.netcup|example\.de' . | xargs sed -i '' -e 's/ki\.netcup/erpai.server/g' -e 's/example\.de/meine-domain.de/g'
+grep -rl --exclude-dir=.git --exclude-dir=MIMS -E 'ki\.netcup|ki\.matthiaskittner\.de' . | xargs sed -i '' -e 's/ki\.netcup/erpai.server/g' -e 's/ki\.matthiaskittner\.de/meine-domain.de/g'
 ```
 
-Danach pruefen: `Scenarios/de/erpai/*.scenario.env` (`SCENARIO_SERVER_SSHCONFIG`, `SCENARIO_SITE_NAME`, `SCENARIO_TRAEFIK_URL`),
+Danach pruefen: `Scenarios/de/matthiaskittner/ki/*.scenario.env` (`SCENARIO_SERVER_SSHCONFIG`, `SCENARIO_SITE_NAME`, `SCENARIO_TRAEFIK_URL`),
 `Units/host/erpai.host.conf` (`SSHCONFIG_DEFAULT`, `DOMAINS`, `JENKINS_URL`), `Jenkins/Jenkinsfile.*`
 (`TARGET_HOST`, `TARGET_HOSTNAME`, `*_URL`, `SITE`), `ssh-config.example` — und in der App
 `erp_ai_app/scripts/erpai-env.sh` (`ERPAI_PROD_URL`, `ERPAI_STAGE_URL`, `ERPAI_DEV_URL`, `ERPAI_JENKINS_URL`) sowie
 die Badge-Regeln in `erp_ai_app/erp_ai_app/site_branding/setup.py`.
+Der Namensraum (`de/matthiaskittner/ki`) folgt dem Zielserver und steht in `erpai.host.conf`, den Szenarien und den Jenkinsfiles (`TARGET_BASE_PATH`).
 **Der Site-Name ist nach dem ersten `init,up` fest** (Site-Ordner, Datenbank) — vorher festlegen.
 
 ## 6. Einen Server von Null aufsetzen
@@ -149,19 +150,19 @@ Deploy-Key fuer die App samt geprueftem GitHub-Host-Schluessel (traegt ihn per `
 Administrator-Kennwort · Schluessel fuer Jenkins · DNS · freie Szenario-Namen · ob schon ein Traefik laeuft.
 Am Ende steht eine Liste, was von Hand bleibt.
 
-**Schritt 2 — Dienste starten**, in der Repo-Wurzel, in dieser Reihenfolge (nur auf einem eigenen Server zuerst `traefik`):
+**Schritt 2 — Dienste starten**, in der Repo-Wurzel, in dieser Reihenfolge (nur auf einem eigenen Server zuerst `traefik`; auf ki.netcup laeuft er schon):
 
 ```bash
-./scenario.deploy de/erpai/erpai init,up -v
+./scenario.deploy de/matthiaskittner/ki/erpai init,up -v
 ```
 ```bash
-./scenario.deploy de/erpai/erpai-stage init,up -v
+./scenario.deploy de/matthiaskittner/ki/erpai-stage init,up -v
 ```
 ```bash
-./scenario.deploy de/erpai/erpai-dev init,up -v
+./scenario.deploy de/matthiaskittner/ki/erpai-dev init,up -v
 ```
 ```bash
-./scenario.deploy de/erpai/erpai-jenkins init,up -v
+./scenario.deploy de/matthiaskittner/ki/erpai-jenkins init,up -v
 ```
 
 Der erste Start einer ERPNext-Instanz baut das Image und legt die Site an — das dauert einige Minuten.
@@ -210,14 +211,14 @@ Alle Befehle in der Repo-Wurzel, `<name>` ist `erpai`, `erpai-stage`, `erpai-dev
 
 | Aufgabe | Befehl |
 |---|---|
-| Welche Szenarien gibt es? | `./scenario.deploy "de/erpai/*" inspect` |
-| Laeuft der Dienst? | `./scenario.deploy de/erpai/<name> test -v` |
-| Neu starten | `./scenario.deploy de/erpai/<name> stop,start` |
-| Nach Aenderung am Szenario oder an der Komponente | `./scenario.deploy de/erpai/<name> init,down,up -v` |
-| Neue App-Version einspielen | Jenkins-Job `erpai-update-stage` bzw. `-prod` — oder von Hand: `./scenario.deploy de/erpai/<name> init,update,down,up -v` |
-| Logs einsammeln | `./scenario.deploy de/erpai/<name> logs` |
+| Welche Szenarien gibt es? | `./scenario.deploy "de/matthiaskittner/ki/*" inspect` |
+| Laeuft der Dienst? | `./scenario.deploy de/matthiaskittner/ki/<name> test -v` |
+| Neu starten | `./scenario.deploy de/matthiaskittner/ki/<name> stop,start` |
+| Nach Aenderung am Szenario oder an der Komponente | `./scenario.deploy de/matthiaskittner/ki/<name> init,down,up -v` |
+| Neue App-Version einspielen | Jenkins-Job `erpai-update-stage` bzw. `-prod` — oder von Hand: `./scenario.deploy de/matthiaskittner/ki/<name> init,update,down,up -v` |
+| Logs einsammeln | `./scenario.deploy de/matthiaskittner/ki/<name> logs` |
 | Was laeuft auf dem Server? | `ssh ki.netcup docker ps` |
-| Bench-Befehl in ERPNext | `ssh ki.netcup docker exec erpai_erpnext_backend_container bench --site erp.example.de <befehl>` |
+| Bench-Befehl in ERPNext | `ssh ki.netcup docker exec erpai_erpnext_backend_container bench --site erpai.ki.matthiaskittner.de <befehl>` |
 
 **Regel:** Nach jeder Aenderung an Dateien einer Komponente oder eines Szenarios zuerst `init` — erst das
 uebertraegt sie auf den Server. Ein normales `down,up` ohne `update` zieht **keinen** neuen Code.
@@ -238,8 +239,8 @@ entsteht automatisch, Skill `/release` in der App) → `erpai-update-prod`.
 ## 8. Sichern und wiederherstellen
 
 - **Automatisch:** die drei Backup-Jobs, naechtlich, nach `/var/dev/MIMS-Scenarios/_backups/<szenario>_<zeitstempel>_*`.
-- **Von Hand:** `./scenario.deploy de/erpai/<name> backup -v`.
-- **Wiederherstellen** (Instanz steht danach auf dem Backup-Stand): `./scenario.deploy de/erpai/<name> down,restore,up -v`
+- **Von Hand:** `./scenario.deploy de/matthiaskittner/ki/<name> backup -v`.
+- **Wiederherstellen** (Instanz steht danach auf dem Backup-Stand): `./scenario.deploy de/matthiaskittner/ki/<name> down,restore,up -v`
   — welcher Zeitstempel, steht in `SCENARIO_DATA_BACKUPTIMESTAMP` (`latest` = der neueste).
 - **Stage oder Dev auf Produktivstand:** Jobs `erpai-resetStage` / `erpai-resetDev` (§7).
 
@@ -252,7 +253,7 @@ erp_ai_infrastructure/
 ├── scenario.deploy                    Stub → MIMS/scenario.deploy (Submodul)
 ├── MIMS/                              Submodul Cerulean-Circle-GmbH/MIMS, Branch mims2
 ├── erp_ai_app/                        Submodul mkt1/erp_ai_app (die App; Stand = main)
-├── Scenarios/de/erpai/                erpai, erpai-stage, erpai-dev, erpai-jenkins, traefik (optional)
+├── Scenarios/de/matthiaskittner/ki/                erpai, erpai-stage, erpai-dev, erpai-jenkins, traefik (optional)
 │   ├── *.scenario.env                 je Dienst: Server, Pfade, Adresse, Volumes
 │   ├── erpai*/apps.json               welche App in welchem Branch installiert wird
 │   └── erpai-jenkins/Dockerfile       Jenkins-Image mit rsync und yq (ueberlagert die MIMS-Komponente)

@@ -32,8 +32,8 @@ pipeline {
         // Zielserver: SSH-Alias wie in den Szenarien (SCENARIO_SERVER_SSHCONFIG) und
         // PLATZHALTER fuer die Adresse, bis der Server festgelegt ist (README §4)
         TARGET_HOST      = "ki.netcup"
-        TARGET_HOSTNAME  = "ki.netcup"
-        TARGET_BASE_PATH = "de/erpai"
+        TARGET_HOSTNAME  = "ki.matthiaskittner.de"
+        TARGET_BASE_PATH = "de/matthiaskittner/ki"
         CONFIGS_DIR      = "/var/dev/MIMS-Scenarios"
         BACKUP_DIR       = "/var/dev/MIMS-Scenarios/_backups/"
         // Empfaenger der Ergebnis-Benachrichtigung. Leer = keine Mail. Setzen, sobald in

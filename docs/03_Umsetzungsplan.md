@@ -5,7 +5,7 @@
 ## erp_ai_infrastructure
 - [x] MIMS als Submodul (`mims2`), Wrapper `scenario.deploy`
 - [x] ERPNext-Komponente `de/erpai/erpnext/16.x` (Kopie aus der Vorlage, ohne Kundenbezug)
-- [x] Fuenf Szenarien `de/erpai/*` mit `apps.json` (main / staging / dev/customer), Jenkins-Dockerfile
+- [x] Fuenf Szenarien `de/matthiaskittner/ki/*` mit `apps.json` (main / staging / dev/customer), Jenkins-Dockerfile
 - [x] Servercheck ki.netcup / kittner.netcup, Namen und Ports kollisionsfrei
 - [x] Jenkinsfiles: backup, update, resetStage, deploy
 - [x] Jenkins-Setup: Credentials, neun Jobs, Customer-Benutzer mit API-Token
