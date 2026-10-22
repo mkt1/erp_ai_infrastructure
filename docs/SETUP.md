@@ -109,16 +109,16 @@ for h in erpai erpai-stage erpai-dev; do curl -s -o /dev/null -w "$h %{http_code
 ssh ki.netcup docker exec erpai_erpnext_backend_container bench --site erpai.ki.matthiaskittner.de list-apps
 ```
 
-Erwartet: `test` gruen, dreimal HTTP 200, `list-apps` nennt frappe, erpnext, erp_ai_app, sut_app_tax, pdf_a_3.
+Erwartet: `test` gruen, dreimal HTTP 200, `list-apps` nennt frappe, erpnext, erp_ai_app, sut_app_tax, pdf_a_3, eu_einvoice, erpnext_datev.
 
 ## 8. Stand der Umsetzung
 
 | Schritt | Stand 22.10.2026, 00:55 |
 |---|---|
 | Host-Setup | ✅ gelaufen (Deploy-Keys fuer erp_ai_app und sut_app_tax bei GitHub, Admin-Kennwort, Jenkins-Schluessel) |
-| `erpai` | ✅ laeuft, HTTP 200, Apps erp_ai_app 0.2.1 (`main`), sut_app_tax 0.8.0, pdf_a_3 0.0.1, Badge-Regeln angelegt |
+| `erpai` | ✅ laeuft, HTTP 200, Apps erp_ai_app 0.2.1 (`main`), sut_app_tax 0.8.0, pdf_a_3 0.0.1, eu_einvoice 16.3.0, erpnext_datev 16.0.2, Badge-Regeln angelegt |
 | `erpai-stage` | ✅ laeuft, HTTP 200, erp_ai_app aus `staging`, Entwicklermodus an |
 | `erpai-dev` | ✅ laeuft, HTTP 200, erp_ai_app aus `dev/customer`, Badge `CUSTOMER · 3c45d99 · …` vom Deploy-Job |
 | `erpai-jenkins` | ✅ laeuft, ohne Assistent eingerichtet; Benutzer `developer` und `customer` mit Tokens; neun Jobs |
-| Jenkins-Jobs geprueft | ✅ `erpai-deploy-customer #1` und `erpai-backup-dev #1` SUCCESS — Polling und Zeittrigger damit aktiv |
+| Jenkins-Jobs geprueft | ✅ `erpai-deploy-customer #1`, `erpai-backup-dev #1` SUCCESS; `erpai-update-dev/-stage/-prod #1` SUCCESS (eu_einvoice 16.3.0 und erpnext_datev 16.0.2 damit auf allen drei Instanzen) |
 | Offen | Customer-Konto in ERPNext (Benutzer, API-Schluessel), Cloud-Umgebungen „Customer" und „Developer" bei Claude; erster Lauf von `erpai-backup-prod` / `-stage` (aktiviert deren Zeittrigger: `Units/jenkins/setup-jenkins.sh --run erpai-backup-prod --run erpai-backup-stage` oder in Jenkins „Jetzt bauen") |

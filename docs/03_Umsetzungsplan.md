@@ -33,4 +33,5 @@
 - [x] Jenkins ohne Browser eingerichtet (`setup-jenkins-init.sh`), Jobs und Benutzer angelegt, zwei Jobs gruen
 - [x] `docs/SETUP.md` und `bootstrap.sh`
 - [ ] Customer-Konto in ERPNext und Cloud-Umgebungen bei Claude anlegen (Matthias)
+- [x] eu_einvoice und erpnext_datev ueber die Update-Jobs auf Dev, Stage, Produktiv (22.10.2026)
 - [ ] Erster Lauf von `erpai-backup-prod` und `erpai-backup-stage` (aktiviert die Zeittrigger)

@@ -44,7 +44,8 @@ nachgezogen, damit alle Instanzen beim ersten `init,up` dieselbe Version tragen.
 | EK-09 | ✅ | vier Szenarien laufen neben 57 Bestandscontainern, Traefik des Servers mitbenutzt, keine Kollision |
 | EK-18 | ✅ | `bench list-apps` auf allen drei Instanzen: erp_ai_app, sut_app_tax 0.8.0, pdf_a_3 0.0.1; Tax-Repo per eigenem Deploy-Key |
 | Rollout | ✅ | `erpai`, `erpai-stage`, `erpai-dev` HTTP 200; `erpai-jenkins` mit neun Jobs; `erpai-deploy-customer #1` und `erpai-backup-dev #1` SUCCESS |
-| Nicht geprueft | ⚠️ | `erpai-update-*` und `erpai-resetStage/-resetDev` sind noch nicht gelaufen (greifen in laufende Instanzen ein; erster Lauf bewusst von Hand) |
+| Update-Jobs | ✅ | `erpai-update-dev`, `-stage`, `-prod` je #1 SUCCESS beim Nachinstallieren von eu_einvoice und erpnext_datev (22.10.2026); Pruefung der Instanzen danach HTTP 200 |
+| Nicht geprueft | ⚠️ | `erpai-resetStage` / `erpai-resetDev` sind noch nicht gelaufen (ueberschreiben die Zielinstanz; erster Lauf bewusst von Hand) |
 
 **Retro-Nachtrag:** Der Einrichtungsassistent von Jenkins war in der Vorlage ein Klickweg; hier ersetzt ihn
 `setup-jenkins-init.sh` (Plugins per CLI, init-Skript) — damit ist `bootstrap.sh` ohne Browser durchlaufbar.
